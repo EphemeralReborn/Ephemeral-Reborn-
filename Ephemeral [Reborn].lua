@@ -1437,12 +1437,12 @@ client.set_event_callback("paint_ui", function()
 
     for i, feature in pairs(menu.antiaim_tab) do
 
-        ui.set_visible(41, is_antiaim_tab and lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Random anti-aim"))
-        ui.set_visible(42, is_antiaim_tab and lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Safe head"))
-        ui.set_visible(43, is_antiaim_tab and lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Static on height advantage"))
-        ui.set_visible(44, is_antiaim_tab and lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Secondary swap on target"))
-        ui.set_visible(45, is_antiaim_tab and lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Secondary swap on target"))
-        ui.set_visible(48, is_antiaim_tab and ui.get(menu.antiaim_tab.onuse_antiaim_mode) == "Static")
+        ui.set_visible(menu.antiaim_tab.random_antiaim_conditions, is_antiaim_tab and lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Random anti-aim"))
+        ui.set_visible(menu.antiaim_tab.safe_head_states, is_antiaim_tab and lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Safe head"))
+        ui.set_visible(menu.antiaim_tab.static_on_height_states, is_antiaim_tab and lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Static on height advantage"))
+        ui.set_visible(menu.antiaim_tab.secondary_swap_conditions, is_antiaim_tab and lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Secondary swap on target"))
+        ui.set_visible(menu.antiaim_tab.secondary_swap_distance, is_antiaim_tab and lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Secondary swap on target"))
+        ui.set_visible(menu.antiaim_tab.onuse_antiaim_side, is_antiaim_tab and ui.get(menu.antiaim_tab.onuse_antiaim_mode) == "Static")
 
         if type(feature) ~= "table" and feature ~= 45 then
             ui.set_visible(feature, is_antiaim_tab)
