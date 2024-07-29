@@ -186,6 +186,20 @@ local lua = {
         
             return colors
         end,
+
+        get_player_weapons = function(idx)
+            local list = {}
+        
+            for i = 0, 64 do
+                local cwpn = entity.get_prop(idx, "m_hMyWeapons", i)
+        
+                if cwpn ~= nil then
+                    table.insert(list, cwpn)
+                end
+            end
+        
+            return list
+        end,
     }
 }
 
@@ -208,7 +222,8 @@ local menu = {
         safe_head_states = ui.new_multiselect(tab, container_aa, "Safe head states", "Standing", "Moving", "Slowwalking", "Crouching", "Air", "Air-Crouching", "Crouch-Moving", "On Zeus"),
         static_on_height_states = ui.new_multiselect(tab, container_aa, "Static on height advantage states", "Standing", "Moving", "Slowwalking", "Crouching", "Air", "Air-Crouching", "Crouch-Moving"),
         secondary_swap_conditions = ui.new_multiselect(tab, container_aa, "Secondary swap conditions", "Target has knife", "Target has zeus"),
-        secondary_swap_distance = ui.new_slider(tab, container_aa, "Secondary swap distance", 350, 700, 425, 1),
+        secondary_swap_weapon = ui.new_combobox(tab, container_aa, "Secondary swap weapon", "Pull pistol", "Pull zeus (Pistol backup)"),
+        secondary_swap_distance = ui.new_slider(tab, container_aa, "Secondary swap distance", 200, 700, 300, 1),
         onuse_antiaim_mode = ui.new_combobox(tab, container_aa, "On-use Antiaim", "Static", "Jitter"),
         onuse_antiaim_hotkey = ui.new_hotkey(tab, container_aa, "On-use keybind", true),
         onuse_antiaim_side = ui.new_combobox(tab, container_aa, "Desync side", "Left", "Right"),
@@ -979,42 +994,52 @@ antiaim_functions = {
         end,
 
         secondary_swap = function()
-
-            if not entity.get_local_player() or not entity.is_alive(entity.get_local_player()) then return end
-    
+            local local_player = entity.get_local_player()
+            if not local_player or not entity.is_alive(local_player) then return end
             if antiaim_functions.onuse_antiaim then return end
-
             if not lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Secondary swap on target") then return end
-
+        
             local secondary_swap_distance = ui.get(menu.antiaim_tab.secondary_swap_distance)
-            local should_swap = false
-    
-            if lua.funcs.table_contains(ui.get(menu.antiaim_tab.secondary_swap_conditions), "Target has knife") then
+            local secondary_swap_weapon = ui.get(menu.antiaim_tab.secondary_swap_weapon)
+            local swap_conditions = ui.get(menu.antiaim_tab.secondary_swap_conditions)
+        
+            local function has_weapon(player, weapon_class)
+                return entity.get_classname(entity.get_player_weapon(player)) == weapon_class
+            end
+        
+            local function swap_weapon(weapon, has_taser)
+                if weapon == "Pull zeus (Pistol backup)" and entity.get_classname(entity.get_player_weapon(entity.get_local_player())) ~= "CWeaponTaser" then
+                    client.exec(has_taser and "slot3" or "slot2")
+                elseif weapon == "Pull pistol" then
+                    client.exec("slot2")
+                end
+                ui.set(refs.yaw[2], 180)
+                ui.set(refs.pitch[1], "Off")
+            end
+        
+            local function check_players_for_weapon(weapon_class)
                 local players = entity.get_players(true)
                 for _, player in ipairs(players) do
-                    local distance = vector(entity.get_origin(entity.get_local_player())):dist(vector(entity.get_origin(player)))
-                    if entity.get_classname(entity.get_player_weapon(player)) == "CKnife" and distance <= secondary_swap_distance then
-                        ui.set(refs.yaw[2], 180)
-                        ui.set(refs.pitch[1], "Off")
-                        should_swap = true
+                    local distance = vector(entity.get_origin(local_player)):dist(vector(entity.get_origin(player)))
+                    if has_weapon(player, weapon_class) and distance <= secondary_swap_distance then
+                        return true
                     end
                 end
+                return false
             end
-
-            if lua.funcs.table_contains(ui.get(menu.antiaim_tab.secondary_swap_conditions), "Target has zeus") then
-                local players = entity.get_players(true)
-                for _, player in ipairs(players) do
-                    local distance = vector(entity.get_origin(entity.get_local_player())):dist(vector(entity.get_origin(player)))
-                    if entity.get_classname(entity.get_player_weapon(player)) == "CWeaponTaser" and distance <= secondary_swap_distance then
-                        ui.set(refs.yaw[2], 180)
-                        ui.set(refs.pitch[1], "Off")
-                        should_swap = true
-                    end
+        
+            local has_taser = false
+            for _, weapon in pairs(lua.funcs.get_player_weapons(local_player)) do
+                if entity.get_classname(weapon) == "CWeaponTaser" then
+                    has_taser = true
+                    break
                 end
             end
-
-            if should_swap then
-                client.exec("slot2")
+        
+            if lua.funcs.table_contains(swap_conditions, "Target has knife") and check_players_for_weapon("CKnife") then
+                swap_weapon(secondary_swap_weapon, has_taser)
+            elseif lua.funcs.table_contains(swap_conditions, "Target has zeus") and check_players_for_weapon("CWeaponTaser") then
+                swap_weapon(secondary_swap_weapon, has_taser)
             end
         end,
     },
@@ -1441,6 +1466,7 @@ client.set_event_callback("paint_ui", function()
         ui.set_visible(menu.antiaim_tab.safe_head_states, is_antiaim_tab and lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Safe head"))
         ui.set_visible(menu.antiaim_tab.static_on_height_states, is_antiaim_tab and lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Static on height advantage"))
         ui.set_visible(menu.antiaim_tab.secondary_swap_conditions, is_antiaim_tab and lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Secondary swap on target"))
+        ui.set_visible(menu.antiaim_tab.secondary_swap_weapon, is_antiaim_tab and lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Secondary swap on target"))
         ui.set_visible(menu.antiaim_tab.secondary_swap_distance, is_antiaim_tab and lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Secondary swap on target"))
         ui.set_visible(menu.antiaim_tab.onuse_antiaim_side, is_antiaim_tab and ui.get(menu.antiaim_tab.onuse_antiaim_mode) == "Static")
 
