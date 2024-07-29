@@ -1,0 +1,1461 @@
+try_require = function(module, message)
+
+    local success, result = pcall(require, module)
+
+    if success then 
+        return result 
+    else 
+        return error(message) 
+    end
+end
+
+local ffi = try_require("ffi", "FFI initialization failed, ensure 'Allow unsafe scripts' is ticked")
+local bit = try_require("bit")
+local vector = try_require("vector")
+local base64 = try_require("gamesense/base64", "Download base64 lib: https://gamesense.pub/forums/viewtopic.php?id=21619")
+local http = try_require("gamesense/http", "Download http lib: https://gamesense.pub/forums/viewtopic.php?id=21619")
+local clipboard = try_require("gamesense/clipboard", "Download clipboard lib: https://gamesense.pub/forums/viewtopic.php?id=28678")
+
+local angle3d_struct = ffi.typeof("struct { float pitch; float yaw; float roll; }")
+local vec_struct = ffi.typeof("struct { float x; float y; float z; }")
+
+local UserCMD_struct =
+    ffi.typeof(
+    [[
+    struct
+    {
+        uintptr_t vfptr;
+        int command_number;
+        int tick_count;
+        $ viewangles;
+        $ aimdirection;
+        float forwardmove;
+        float sidemove;
+        float upmove;
+        int buttons;
+        uint8_t impulse;
+        int weaponselect;
+        int weaponsubtype;
+        int random_seed;
+        short mousedx;
+        short mousedy;
+        bool hasbeenpredicted;
+        $ headangles;
+        $ headoffset;
+        bool send_packet; 
+    }
+    ]],
+    angle3d_struct,
+    vec_struct,
+    angle3d_struct,
+    vec_struct
+)
+
+local client_sig = client.find_signature("client.dll", "\xB9\xCC\xCC\xCC\xCC\x8B\x40\x38\xFF\xD0\x84\xC0\x0F\x85") or error("Couldn't find signature!")
+local get_UserCMD_struct = ffi.typeof("$* (__thiscall*)(uintptr_t ecx, int nSlot, int sequence_number)", UserCMD_struct)
+local input_vtbl = ffi.typeof([[struct{uintptr_t padding[8]; $ GetUserCmd;}]], get_UserCMD_struct)
+local input_vfunc_ptr  = ffi.typeof([[struct { $* vfptr; }*]], input_vtbl)
+local get_input_vfunc_ptr = ffi.cast(input_vfunc_ptr , ffi.cast("uintptr_t**", tonumber(ffi.cast("uintptr_t", client_sig)) + 1)[0])
+
+local presets = {}
+
+local refs = {
+    damage_override = {ui.reference("RAGE", "Aimbot", "Minimum damage override")},
+    damage = {ui.reference("RAGE", "Aimbot", "Minimum damage")},
+    delay_shot = ui.reference("RAGE", "Other", "Delay shot"),
+    fakeduck = ui.reference("RAGE", "Other", "Duck peek assist"),
+    doubletap = {ui.reference("RAGE", "Aimbot", "Double tap")},
+    enabled = ui.reference("AA", "Anti-aimbot angles", "Enabled"),
+    pitch = {ui.reference("AA", "Anti-aimbot angles", "pitch")},
+    roll = ui.reference("AA", "Anti-aimbot angles", "roll"),
+    yaw_base = ui.reference("AA", "Anti-aimbot angles", "Yaw base"),
+    yaw = {ui.reference("AA", "Anti-aimbot angles", "Yaw")},
+    freestanding_bodyyaw = ui.reference("AA", "anti-aimbot angles", "Freestanding body yaw"),
+    edge_yaw = ui.reference("AA", "Anti-aimbot angles", "Edge yaw"),
+    yawjitter = {ui.reference("AA", "Anti-aimbot angles", "Yaw jitter")},
+    bodyyaw = {ui.reference("AA", "Anti-aimbot angles", "Body yaw")},
+    freestanding = {ui.reference("AA", "Anti-aimbot angles", "Freestanding")},
+    fakelag_enabled = {ui.reference("AA", "Fake lag", "Enabled")},
+    fakelag_mode = ui.reference("AA", "Fake lag", "Amount"),
+    fakelag_variance = ui.reference("AA", "Fake lag", "Variance"),
+    fakelag_limit = ui.reference("AA", "Fake lag", "Limit"),
+    onshot = {ui.reference("AA", "Other", "On shot anti-aim")},
+    slow_motion = {ui.reference("AA", "Other", "Slow motion")},
+    leg_movement = ui.reference("AA", "Other", "Leg movement"),
+    quick_peek = {ui.reference("RAGE", "Other", "Quick peek assist")},
+}
+
+local lua = {
+    database = {
+        configs = ":Ephemeral::configs:"
+    },
+    vars = {
+        hitgroup_names = { "Generic", "Head", "Chest", "Stomach", "Left arm", "Right arm", "Left leg", "Right leg", "Neck", "?", "Gear" },
+        player_states = {"Global", "Standing", "Moving", "Slowwalking", "Crouching", "Air", "Air-Crouching", "Crouch-Moving", "Fakelag"},
+        player_states_abrev = {"G", "S", "M", "SW", "C", "A", "AC", "CM", "FL"},
+        string_to_int = {["Global"] = 1, ["Standing"] = 2, ["Moving"] = 3, ["Slowwalking"] = 4, ["Crouching"] = 5, ["Air"] = 6, ["Air-Crouching"] = 7, ["Crouch-Moving"] = 8 , ["Fakelag"] = 9},
+        int_to_string = {[1] = "Global", [2] = "Standing", [3] = "Moving", [4] = "Slowwalking", [5] = "Crouching", [6] = "Air", [7] = "Air-Crouching", [8] = "Crouch-Moving", [9] = "Fakelag"},
+        active_state = 1,
+        player_state = 1,
+    },
+    funcs = {
+        table_contains = function(tbl, value)
+            for i = 1, #tbl do
+                if tbl[i] == value then
+                    return true
+                end
+            end
+            return false
+        end,
+        reset_antiaim_tab = function(ref)
+            ui.set_visible(refs.enabled, ref)
+            ui.set_visible(refs.pitch[1], ref)
+            ui.set_visible(refs.pitch[2], ref)
+            ui.set_visible(refs.roll, ref)
+            ui.set_visible(refs.yaw_base, ref)
+            ui.set_visible(refs.yaw[1], ref)
+            ui.set_visible(refs.yaw[2], ref)
+            ui.set_visible(refs.yawjitter[1], ref)
+            ui.set_visible(refs.yawjitter[2], ref)
+            ui.set_visible(refs.bodyyaw[1], ref)
+            ui.set_visible(refs.bodyyaw[2], ref)
+            ui.set_visible(refs.freestanding[1], ref)
+            ui.set_visible(refs.freestanding[2], ref)
+            ui.set_visible(refs.freestanding_bodyyaw, ref)
+            ui.set_visible(refs.edge_yaw, ref)
+            ui.set_visible(refs.fakelag_enabled[1], ref)
+            ui.set_visible(refs.fakelag_enabled[2], ref)
+            ui.set_visible(refs.fakelag_mode, ref)
+            ui.set_visible(refs.fakelag_variance, ref)
+            ui.set_visible(refs.fakelag_limit, ref)
+        end,
+        default_antiaim_tab = function()
+            ui.set(refs.enabled, true)
+            ui.set(refs.pitch[1], "Off")
+            ui.set(refs.pitch[2], 0)
+            ui.set(refs.roll, 0)
+            ui.set(refs.yaw_base, "local view")
+            ui.set(refs.yaw[1], "Off")
+            ui.set(refs.yaw[2], 0)
+            ui.set(refs.yawjitter[1], "Off")
+            ui.set(refs.yawjitter[2], 0)
+            ui.set(refs.bodyyaw[1], "Off")
+            ui.set(refs.bodyyaw[2], 0)
+            ui.set(refs.freestanding[1], false)
+            ui.set(refs.freestanding[2], "On hotkey")
+            ui.set(refs.freestanding_bodyyaw, false)
+            ui.set(refs.edge_yaw, false)
+            ui.set(refs.fakelag_enabled[1], true)
+            ui.set(refs.fakelag_enabled[2], "Always On")
+            ui.set(refs.fakelag_mode, "Maximum")
+            ui.set(refs.fakelag_variance, 0)
+            ui.set(refs.fakelag_limit, 14)
+        end,
+        normalize = function(angle)
+            return (angle + 180) % 360 - 180
+        end,
+        vec_angles = function(angle_x, angle_y)
+            rad_angle_x = math.rad(angle_x)
+            rad_angle_y = math.rad(angle_y)
+            sy = math.sin(rad_angle_y)
+            cy = math.cos(rad_angle_y)
+            sp = math.sin(rad_angle_x)
+            cp = math.cos(rad_angle_x)
+            return cp * cy, cp * sy, -sp
+        end,
+        hex = function(arg)
+            result = "\a"
+            for _, value in pairs(arg) do
+                output = string.format("%02X", value)
+                result = result .. output
+            end
+            return result .. "FF"
+        end,
+        rgba_hex = function(r, g, b, a)
+            return string.format("%02X%02X%02X%02X", r, g, b, a)
+        end,
+        create_color_array = function(r, g, b, str)
+            local colors = {}
+            local curtime = globals.curtime()
+            local cos_base = 2 * math.pi * curtime / 4
+        
+            for i = 0, #str do
+                local alpha = 255 * math.abs(math.cos(cos_base + i * 5 / 30))
+                colors[#colors + 1] = {r, g, b, alpha}
+            end
+        
+            return colors
+        end,
+    }
+}
+
+local menu_color_ref = ui.reference("MISC", "Settings", "Menu color")
+local lua_color = {ui.get(menu_color_ref)}
+
+client.color_log(255, 255, 255, "Welcome to\0")
+client.color_log(lua_color[1], lua_color[2], lua_color[3], " Ephemeral\0")
+client.color_log(255, 255, 255, " [Reborn]")
+
+local tab, container_aa, container_fl = "AA", "Anti-aimbot angles", "Fake lag"
+local label = ui.new_label(tab, container_aa, "Ephemeral")
+local tab_selection = ui.new_combobox(tab, container_aa, "\nTab", "Anti-aim", "Misc", "Config")
+local antiaim_tabs = ui.new_combobox(tab, container_aa, "\nAnti-aim Tabs", "Builder", "Keybinds")
+
+local menu = {
+    antiaim_tab = {
+        safety_options = ui.new_multiselect(tab, container_aa, "Safety options", "Random anti-aim", "Safe knife", "Safe head", "Static on height advantage", "Avoid backstab"),
+        random_antiaim_conditions = ui.new_multiselect(tab, container_aa, "Random anti-aim conditions", "Warmup", "Freeze time", "Round end"),
+        safe_head_states = ui.new_multiselect(tab, container_aa, "Safe head states", "Standing", "Moving", "Slowwalking", "Crouching", "Air", "Air-Crouching", "Crouch-Moving", "On Zeus"),
+        static_on_height_states = ui.new_multiselect(tab, container_aa, "Static on height advantage states", "Standing", "Moving", "Slowwalking", "Crouching", "Air", "Air-Crouching", "Crouch-Moving"),
+        onuse_antiaim_mode = ui.new_combobox(tab, container_aa, "On-use Antiaim", "Static", "Jitter"),
+        onuse_antiaim_hotkey = ui.new_hotkey(tab, container_aa, "On-use keybind", true),
+        onuse_antiaim_side = ui.new_combobox(tab, container_aa, "Desync side", "Left", "Right"),
+        freestand_mode = ui.new_combobox(tab, container_aa, "Freestanding", "Jitter", "Static"),
+        freestand_hotkey = ui.new_hotkey(tab, container_aa, "Freestand", true),
+        freestand_disablers = ui.new_multiselect(tab, container_aa, "Freestand Disablers", lua.vars.player_states),
+        fast_ladder = ui.new_checkbox(tab, container_aa, "Fast ladder"),
+        edge_yaw = ui.new_hotkey(tab, container_aa, "Edge yaw", false),
+        manual_antiaim_forward = ui.new_hotkey(tab, container_aa, "Manual Forward", false),
+        manual_antiaim_left = ui.new_hotkey(tab, container_aa, "Manual Left", false),
+        manual_antiaim_right = ui.new_hotkey(tab, container_aa, "Manual Right", false),
+    },
+    antiaim_builder_tab = {
+        state = ui.new_combobox(tab, container_aa, "Anti-aim state", lua.vars.player_states)
+    },
+    misc_tab = {
+        animations = ui.new_multiselect(tab, container_aa, "Anim breakers", "Static legs", "Leg fucker", "0 pitch on landing"),
+        minimum_damage_indicator = ui.new_combobox(tab, container_aa, "Minimum Damage Indicator", "Off", "On override", "Always"),
+    },
+
+    configuration_tab = {
+        list = ui.new_listbox(tab, container_aa, "Configs", ""),
+        name = ui.new_textbox(tab, container_aa, "Config name", ""),
+        load = ui.new_button(tab, container_aa, "Load", function() end),
+        save = ui.new_button(tab, container_aa, "Save", function() end),
+        delete = ui.new_button(tab, container_aa, "Delete", function() end),
+        import = ui.new_button(tab, container_aa, "Import", function() end),
+        export = ui.new_button(tab, container_aa, "Export", function() end)
+    }
+}
+
+local antiaim_builder_tbl = {}
+local antiaim_container = {}
+for i=1, #lua.vars.player_states do
+    antiaim_container[i] = lua.funcs.hex({200,200,200}) .. "(" .. lua.funcs.hex({222,55,55}) .. "" .. lua.vars.player_states_abrev[i] .. "" .. lua.funcs.hex({200,200,200}) .. ")" .. lua.funcs.hex({155,155,155}) .. " "
+    antiaim_builder_tbl[i] = {
+        enable_state = ui.new_checkbox(tab, container_aa, "Enable state: " .. lua.funcs.hex({lua_color[1], lua_color[2], lua_color[3]}) .. lua.vars.player_states[i]),
+        state_disablers = ui.new_multiselect(tab, container_aa, "Disablers\n" .. antiaim_container[i], "Standing", "Moving", "Slowwalking", "Crouching", "Air", "Air-Crouching", "Crouch-Moving"),
+        pitch = ui.new_combobox(tab, container_aa, "Pitch\n" .. antiaim_container[i], "Off", "Default", "Up", "Down", "Minimal", "Random", "Custom"),
+        pitch_slider = ui.new_slider(tab, container_aa, "\nPitch add" .. antiaim_container[i], -89, 89, 0, true, "°", 1),
+        yaw_base = ui.new_combobox(tab, container_aa, "Yaw base\n" .. antiaim_container[i], "Local view", "At targets"),
+        yaw = ui.new_combobox(tab, container_aa, "Yaw\n" .. antiaim_container[i], "Off", "Static", "L&R"),
+        yaw_static = ui.new_slider(tab, container_aa, "\nyaw" .. antiaim_container[i], -180, 180, 0, true, "°", 1),
+        yaw_left = ui.new_slider(tab, container_aa, "Left\nyaw" .. antiaim_container[i], -180, 180, 0, true, "°", 1),
+        yaw_right = ui.new_slider(tab, container_aa, "Right\nyaw" .. antiaim_container[i], -180, 180, 0, true, "°", 1),
+        yawjitter = ui.new_combobox(tab, container_aa, "Yaw jitter\n" .. antiaim_container[i], "Off", "Random"),
+        yawjitter_random = ui.new_slider(tab, container_aa, "\nyaw jitter" .. antiaim_container[i], -180, 180, 0, true, "°", 1),
+        bodyyaw = ui.new_combobox(tab, container_aa, "Body yaw\n" .. antiaim_container[i], "Off", "Static", "Jitter", "Delayed Jitter"),
+        fake_limit = ui.new_slider(tab, container_aa, "Fake yaw limit\n" .. antiaim_container[i], -58, 58, 0, true, "°", 1),
+        fake_limit_left = ui.new_slider(tab, container_aa, "Fake yaw left\n" .. antiaim_container[i], 1, 58, 25, true, "°", 1),
+        fake_limit_right = ui.new_slider(tab, container_aa, "Fake yaw right\n" .. antiaim_container[i], 1, 58, 25, true, "°", 1),
+        fake_limit_left_delayed = ui.new_slider(tab, container_aa, "Fake yaw left\n delayed" .. antiaim_container[i], 1, 58, 25, true, "°", 1),
+        fake_limit_right_delayed = ui.new_slider(tab, container_aa, "Fake yaw right\n delayed" .. antiaim_container[i], 1, 58, 25, true, "°", 1),
+        fake_limit_delay_ticks = ui.new_slider(tab, container_aa, "Delay ticks\n" .. antiaim_container[i], 1, 10, 1, true, "", 1),
+        force_defensive_exploit = ui.new_combobox(tab, container_aa, "Force defensive\n" .. antiaim_container[i], "On-peek", "Always on", "Command based"),
+        defensive_antiaim_selection = ui.new_multiselect(tab, container_fl, "Defensive antiaim\n" .. antiaim_container[i], "Pitch", "Yaw"),
+        defensive_pitch_options = ui.new_combobox(tab, container_fl, "Defensive pitch\n" .. antiaim_container[i], "Up", "Half-up", "Zero", "Flick", "Random", "Custom"),
+        defensive_pitch_flick_degree1 = ui.new_slider(tab, container_fl, "Flick degree [1]\n" .. antiaim_container[i], -89, 89, 0, true, "°", 1),
+        defensive_pitch_flick_degree2 = ui.new_slider(tab, container_fl, "Flick degree [2]\n" .. antiaim_container[i], -89, 89, 0, true, "°", 1),
+        defensive_pitch_custom = ui.new_slider(tab, container_fl, "Custom degree\n" .. antiaim_container[i], -89, 89, 0, true, "°", 1),
+        defensive_yaw_options = ui.new_combobox(tab, container_fl, "Defensive yaw\n" .. antiaim_container[i], "Forward", "Flick", "Spin", "Distortion", "Random"),
+        defensive_yaw_flick_angle1 = ui.new_slider(tab, container_fl, "Flick degree [1]\n" .. antiaim_container[i], -180, 180, 0, true, "°", 1),
+        defensive_yaw_flick_angle2 = ui.new_slider(tab, container_fl, "Flick degree [2]\n" .. antiaim_container[i], -180, 180, 0, true, "°", 1),
+        defensive_yaw_spin_range = ui.new_slider(tab, container_fl, "Spin range\n" .. antiaim_container[i], 1, 180, 0, true, "°", 1),
+        defensive_yaw_spin_speed = ui.new_slider(tab, container_fl, "Spin speed\n" .. antiaim_container[i], 1, 10, 1, true, "", 1),
+        defensive_yaw_distortion_range = ui.new_slider(tab, container_fl, "Distortion range\n" .. antiaim_container[i], 1, 180, 0, true, "°", 1),
+        defensive_yaw_distortion_speed = ui.new_slider(tab, container_fl, "Distortion speed\n" .. antiaim_container[i], 1, 10, 1, true, "", 1),
+        defensive_yaw_random_range = ui.new_slider(tab, container_fl, "Random Range\n" .. antiaim_container[i], 1, 360, 1, true, "°", 1),
+    }
+end
+
+config_system = {}
+
+config_system = {
+
+    get_config = function(name)
+        local database = database.read(lua.database.configs) or {}
+
+        for i, v in pairs(database) do
+            if v.name == name then
+                return {
+                    config = v.config,
+                    index = i
+                }
+            end
+        end
+
+        for i, v in pairs(presets) do
+            if v.name == name then
+                return {
+                    config = v.config,
+                    index = i
+                }
+            end
+        end
+
+        return false
+    end,
+    save_config = function(name)
+        local db = database.read(lua.database.configs) or {}
+        local config_tbl = {
+            antiaim = {},
+            antiaim_tab = {}
+        }
+    
+        if name:match("[^%w]") then
+            return
+        end
+    
+        for key, value in pairs(lua.vars.player_states_abrev) do
+            config_tbl.antiaim[value] = {}
+            for k, v in pairs(antiaim_builder_tbl[key]) do
+                config_tbl.antiaim[value][k] = ui.get(v)
+            end
+        end
+    
+        for tab_name, tab_settings in pairs(menu) do
+            if tab_name ~= "configuration_tab" then
+                config_tbl.antiaim_tab[tab_name] = {}
+                for setting_name, setting in pairs(tab_settings) do
+                    config_tbl.antiaim_tab[tab_name][setting_name] = ui.get(setting)
+                end
+            end
+        end
+
+        local cfg = config_system.get_config(name)
+    
+        if not cfg then
+            table.insert(db, { name = name, config = json.stringify(config_tbl) })
+        else
+            db[cfg.index].config = json.stringify(config_tbl)
+        end
+    
+        database.write(lua.database.configs, db)
+    end,        
+    delete_config = function(name)
+        local db = database.read(lua.database.configs) or {}
+
+        for i, v in pairs(db) do
+            if v.name == name then
+                table.remove(db, i)
+                break
+            end
+        end
+
+        for i, v in pairs(presets) do
+            if v.name == name then
+                return false
+            end
+        end
+
+        database.write(lua.database.configs, db)
+    end,
+    load_config_list = function()
+        local database = database.read(lua.database.configs) or {}
+        local config = {}
+
+        for i, v in pairs(presets) do
+            table.insert(config, v.name)
+        end
+
+        for i, v in pairs(database) do
+            table.insert(config, v.name)
+        end
+
+        return config
+    end,
+    load_config = function(name)
+        local cfg = config_system.get_config(name)
+        config_system.load_settings(json.parse(cfg.config))
+    end,
+    load_settings = function(config)
+
+        for key, value in pairs(lua.vars.player_states_abrev) do
+            for k, v in pairs(antiaim_builder_tbl[key]) do
+                if v ~= nil then
+                    ui.set(v, config.antiaim[value][k])
+                end
+            end
+        end
+        
+        for tab_name, tab_settings in pairs(config.antiaim_tab or {}) do
+            for setting_name, setting_value in pairs(tab_settings) do
+                if setting_value ~= nil then
+                    ui.set(menu[tab_name][setting_name], setting_value)
+                end
+            end
+        end
+    end,
+    import_settings = function()
+        local config = json.parse(clipboard.get())
+
+        for key, value in pairs(lua.vars.player_states_abrev) do
+            for k, v in pairs(antiaim_builder_tbl[key]) do
+                if v ~= nil then
+                    ui.set(v, config.antiaim[value][k])
+                end
+            end
+        end
+        
+        for tab_name, tab_settings in pairs(config.antiaim_tab or {}) do
+            for setting_name, setting_value in pairs(tab_settings) do
+                if setting_value ~= nil then
+                    ui.set(menu[tab_name][setting_name], setting_value)
+                end
+            end
+        end
+    end,
+    export_settings = function(name)
+        local config = {
+            antiaim = {},
+            antiaim_tab = {}
+        }
+
+        for key, value in pairs(lua.vars.player_states_abrev) do
+            config.antiaim[value] = {}
+            for k, v in pairs(antiaim_builder_tbl[key]) do
+                config.antiaim[value][k] = ui.get(v)
+            end
+        end
+
+        for tab_name, tab_settings in pairs(menu) do
+            if tab_name ~= "configuration_tab" then
+                config.antiaim_tab[tab_name] = {}
+                for setting_name, setting in pairs(tab_settings) do
+                    config.antiaim_tab[tab_name][setting_name] = ui.get(setting)
+                end
+            end
+        end
+        
+        clipboard.set(json.stringify(config))
+    end,
+    create_db = function()
+        local configs = lua.database.configs
+        if not database.read(configs) then
+            database.write(configs, {})
+        end
+    
+        http.get("https://pastebin.com/raw/mh9Ceudd", function(success, response)
+            if not success then
+                print("Failed to get presets")
+                return
+            end
+            
+            local data = json.parse(response.body)
+            
+            for i, preset in pairs(data.presets) do
+                table.insert(presets, { name = preset.name, config = json.stringify(preset.config) })
+                ui.set(menu.configuration_tab.name, preset.name)
+            end
+            ui.update(menu.configuration_tab.list, config_system.load_config_list())
+        end)
+    end,
+}
+
+config_system.create_db()
+
+
+desync_functions = {}
+defensive_functions = {}
+antiaim_functions = {}
+
+desync_functions = {
+
+    firing_time = 0,
+    yaw = 0,
+    pitch = 0,
+
+    _firing = function(cmd)
+
+        local client_weapon = entity.get_player_weapon(entity.get_local_player())
+
+        if not client_weapon then
+            return false
+        end
+        
+        if cmd.in_attack == 1 or cmd.in_attack2 == 1 then
+            if entity.get_classname(entity.get_player_weapon(entity.get_local_player())):find("Grenade") then
+                desync_functions.firing_time = globals.curtime() + 0.20
+            else
+                desync_functions.firing_time = globals.curtime() + 0.001
+            end
+        end
+
+        if desync_functions.firing_time > globals.curtime() then
+            return false
+        end
+
+        return true
+    end,
+
+
+    _choking = function(cmd)
+        local doubletap_active = ui.get(refs.doubletap[1]) and ui.get(refs.doubletap[2])
+        local onshot_active = ui.get(refs.onshot[1]) and ui.get(refs.onshot[2])
+        local fakeduck_active = ui.get(refs.fakeduck)
+        local fakelag_limit = ui.get(refs.fakelag_limit)
+
+        if not doubletap_active and not onshot_active and not cmd.no_choke or fakeduck_active then
+            if cmd.chokedcommands >= 0 and cmd.chokedcommands < fakelag_limit then
+                return cmd.chokedcommands % 2 == 0
+            else
+                return cmd.chokedcommands % 2 == 1
+            end
+        else
+            return cmd.chokedcommands == 0
+        end
+    end,
+
+    _run = function(cmd, fake, yaw, pitch)
+        local user_cmd = get_input_vfunc_ptr.vfptr.GetUserCmd(ffi.cast("uintptr_t", get_input_vfunc_ptr), 0, cmd.command_number)
+        local eye_angles = {entity.get_prop(entity.get_local_player(), "m_angEyeAngles")}
+        local cam_pitch, cam_yaw = client.camera_angles()
+        local yaw_base = ui.get(antiaim_builder_tbl[lua.vars.player_state].yaw_base)
+        local normalized_yaw = 0
+
+        
+        if yaw_base == "At targets" and client.current_threat() then
+            normalized_yaw = eye_angles[2]
+        else
+            normalized_yaw = lua.funcs.normalize(cam_yaw) + yaw
+        end
+
+
+        ui.set(refs.bodyyaw[1], desync_functions._choking(cmd) and "Static" or "Off")
+
+        if cmd.chokedcommands == 0 then
+            desync_functions.yaw = normalized_yaw - fake*2
+            desync_functions.pitch = pitch
+        end
+        
+        cmd.allow_send_packet = false
+        if desync_functions._firing(cmd) then
+            if not user_cmd.hasbeenpredicted then
+                if desync_functions._choking(cmd) then
+                    cmd.yaw = desync_functions.yaw
+                    cmd.pitch = desync_functions.pitch
+                end
+            end
+        end
+    end,
+}
+
+defensive_functions = {
+    lastsimtime = 0,
+    until_tick = 0,
+    ticks = 0,
+    active = false,
+    time = 0,
+    pitch_active = false,
+    yaw_active = false,
+
+    defensive_check = function()
+        local local_player = entity.get_local_player()
+        if not local_player then return end
+
+        local antiaim_selection = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_antiaim_selection)
+        if not (lua.funcs.table_contains(antiaim_selection, "Pitch") or lua.funcs.table_contains(antiaim_selection, "Yaw")) then
+            return
+        end
+
+        local cursimtime = toticks(entity.get_prop(local_player, "m_flSimulationTime"))
+        local simdif = defensive_functions.lastsimtime - cursimtime
+
+        if simdif > 0 then
+            defensive_functions.until_tick = globals.tickcount() + math.abs(simdif) - toticks(client.latency())
+            defensive_functions.ticks = defensive_functions.until_tick - globals.tickcount()
+        end
+
+        defensive_functions.active = defensive_functions.until_tick > globals.tickcount()
+        defensive_functions.lastsimtime = cursimtime
+        defensive_functions.time = defensive_functions.ticks - (defensive_functions.until_tick - globals.tickcount())
+        
+        return defensive_functions
+    end,
+
+    get_defensive_yaw_values = function()
+        local yaw_options = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_yaw_options)
+        local cur_time = globals.curtime()
+        local tick_count = globals.tickcount()
+
+        if yaw_options == 'Forward' then
+            return tick_count % 3 == 0 and -155 or 155
+        elseif yaw_options == 'Flick' then
+            local angle1 = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_yaw_flick_angle1)
+            local angle2 = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_yaw_flick_angle2)
+            return tick_count % 3 == 0 and angle1 or angle2
+        elseif yaw_options == 'Spin' then
+            local speed = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_yaw_spin_speed)
+            local range = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_yaw_spin_range)
+            return -math.fmod(cur_time * (speed * 360), range * 2) + range
+        elseif yaw_options == 'Distortion' then
+            local speed = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_yaw_distortion_speed)
+            local range = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_yaw_distortion_range)
+            return math.sin(cur_time * speed) * range
+        elseif yaw_options == 'Random' then
+            local random_range = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_yaw_random_range)
+            return math.random(-random_range / 2, random_range / 2)
+        end
+    end,
+
+    get_defensive_pitch_values = function()
+        local pitch_options = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_pitch_options)
+        
+        if pitch_options == 'Up' then
+            return -89
+        elseif pitch_options == 'Half-up' then
+            return -45
+        elseif pitch_options == 'Zero' then
+            return 0
+        elseif pitch_options == 'Flick' then
+            local flick1 = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_pitch_flick_degree1)
+            local flick2 = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_pitch_flick_degree2)
+            return globals.tickcount() % 3 == 0 and flick1 or flick2
+        elseif pitch_options == 'Random' then
+            return math.random(-89, 89)
+        elseif pitch_options == 'Custom' then
+            return ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_pitch_custom)
+        end
+    end,
+
+    _run = function()
+        local local_player = entity.get_local_player()
+        if not local_player then return end
+
+        local antiaim_selection = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_antiaim_selection)
+        if not (lua.funcs.table_contains(antiaim_selection, "Pitch") or lua.funcs.table_contains(antiaim_selection, "Yaw")) then
+            defensive_functions.active = false
+            return
+        end
+
+        local defensive_check = defensive_functions.defensive_check()
+        if defensive_check.active then
+            if antiaim_functions.safe_knife then return end
+            if lua.funcs.table_contains(antiaim_selection, "Pitch") then
+                ui.set(refs.pitch[1], "Custom")
+                ui.set(refs.pitch[2], defensive_functions.get_defensive_pitch_values())
+                defensive_functions.pitch_active = true
+            end
+
+            if lua.funcs.table_contains(antiaim_selection, "Yaw") then
+                ui.set(refs.yaw[2], defensive_functions.get_defensive_yaw_values())
+                defensive_functions.yaw_active = true
+            end
+        end
+
+        defensive_functions.pitch_active = false
+        defensive_functions.yaw_active = false
+    end,
+}
+
+antiaim_functions = {
+
+    delay_shot = ui.new_checkbox("RAGE", "Aimbot", "Delay shot"),
+    onuse_antiaim = false,
+    avoid_backstab_bool = false,
+    safe_knife = false,
+    manual_antiaim_bool = false,
+    round_end = false,
+    manual_antiaim_tbl = {
+        last_forward,
+        last_left,
+        last_right,
+        manual_side,
+    },
+
+    antiaim_state = function(cmd)
+
+        ui.set(refs.enabled, true)
+
+        if not entity.get_local_player() or not entity.is_alive(entity.get_local_player()) then return end
+
+        local flags = entity.get_prop(entity.get_local_player(), "m_fFlags")
+        local onground = bit.band(flags, 1) ~= 0 and cmd.in_jump == 0
+        local velocity = vector(entity.get_prop(entity.get_local_player(), "m_vecVelocity"))
+        local lp_velocity = math.sqrt(velocity.x^2 + velocity.y^2) < 5
+        local doubletap_active = ui.get(refs.doubletap[1]) and ui.get(refs.doubletap[2])
+        local onshot_active = ui.get(refs.onshot[1]) and ui.get(refs.onshot[2])
+
+
+        local get_player_state = function()
+            if not onground then
+                return entity.get_prop(entity.get_local_player(), "m_flDuckAmount") > 0.1 and 7 or 6
+            elseif entity.get_prop(entity.get_local_player(), "m_flDuckAmount") > 0.1 then
+                return lp_velocity and 5 or 8
+            elseif ui.get(refs.slow_motion[1]) and ui.get(refs.slow_motion[2]) and not lp_velocity then
+                return 4
+            elseif not lp_velocity then
+                return 3
+            elseif lp_velocity then
+                return 2
+            end
+            return 1
+        end
+
+        lua.vars.player_state = get_player_state()
+
+        if ui.get(antiaim_builder_tbl[9].enable_state) and not lua.funcs.table_contains(ui.get(antiaim_builder_tbl[9].state_disablers), lua.vars.int_to_string[lua.vars.player_state]) and not lua.funcs.table_contains(ui.get(menu.antiaim_tab.safe_head_states), lua.vars.int_to_string[lua.vars.player_state]) and not doubletap_active and not onshot_active then
+            lua.vars.player_state = 9
+        end
+
+        if not ui.get(antiaim_builder_tbl[lua.vars.player_state].enable_state) and lua.vars.player_state ~= 1 then
+            lua.vars.player_state = 1
+        end
+    end,
+
+    antiaim_handle = function(cmd)
+
+        if not entity.get_local_player() or not entity.is_alive(entity.get_local_player()) then return end
+
+        if antiaim_functions.onuse_antiaim or defensive_functions.active then return end
+
+        if cmd.in_use == 1 then return end
+
+        if ui.get(antiaim_builder_tbl[lua.vars.player_state].enable_state) then
+
+            ui.set(refs.fakelag_mode, "Maximum")
+            ui.set(refs.fakelag_variance, 0)
+            ui.set(refs.fakelag_limit, 14)
+
+            if entity.get_player_weapon(entity.get_local_player()) ~= nil then
+                if not entity.get_classname(entity.get_player_weapon(entity.get_local_player())):find("Grenade") then
+                    if ui.get(antiaim_builder_tbl[lua.vars.player_state].force_defensive_exploit) == "Always on" then
+                        cmd.force_defensive = true
+                    elseif ui.get(antiaim_builder_tbl[lua.vars.player_state].force_defensive_exploit) == "Command based" then
+                        cmd.force_defensive = cmd.command_number % 2 == 1
+                    end
+                else
+                    cmd.force_defensive = false
+                end
+            end
+
+            if not defensive_functions.pitch_active then
+                local pitch_setting = ui.get(antiaim_builder_tbl[lua.vars.player_state].pitch)
+                ui.set(refs.pitch[1], pitch_setting)
+                if pitch_setting == "Custom" then
+                    ui.set(refs.pitch[2], ui.get(antiaim_builder_tbl[lua.vars.player_state].pitch_slider))
+                end
+            end
+
+            ui.set(refs.yaw_base, ui.get(antiaim_builder_tbl[lua.vars.player_state].yaw_base))
+
+            local yaw_mode = ui.get(antiaim_builder_tbl[lua.vars.player_state].yaw)
+            local side = (math.floor(math.abs(entity.get_prop(entity.get_local_player(), "m_flPoseParameter", 11) * 120)) - 60) > 0 and 1 or -1
+            local body_yaw_mode = ui.get(antiaim_builder_tbl[lua.vars.player_state].bodyyaw)
+
+
+            if not defensive_functions.yaw_active then
+                if yaw_mode ~= "Off" then
+                    ui.set(refs.yaw[1], "180")
+                    if yaw_mode == "L&R" then
+                        if body_yaw_mode == "Static" or body_yaw_mode == "Off" then
+                            ui.set(refs.yaw[2], globals.tickcount() % 4 >= 2 and ui.get(antiaim_builder_tbl[lua.vars.player_state].yaw_left) or ui.get(antiaim_builder_tbl[lua.vars.player_state].yaw_right))
+                        else
+                            ui.set(refs.yaw[2], side == 1 and ui.get(antiaim_builder_tbl[lua.vars.player_state].yaw_left) or ui.get(antiaim_builder_tbl[lua.vars.player_state].yaw_right))
+                        end
+                    else
+                        ui.set(refs.yaw[2], ui.get(antiaim_builder_tbl[lua.vars.player_state].yaw_static))
+                    end
+                else
+                    ui.set(refs.yaw[1], "Off")
+                    ui.set(refs.yaw[2], 0)
+                end
+            end
+
+ 
+
+            ui.set(refs.yawjitter[1], ui.get(antiaim_builder_tbl[lua.vars.player_state].yawjitter))
+            ui.set(refs.yawjitter[2], ui.get(antiaim_builder_tbl[lua.vars.player_state].yawjitter_random))
+
+            local fake_limit = ui.get(antiaim_builder_tbl[lua.vars.player_state].fake_limit)
+            local fake_limit_left = ui.get(antiaim_builder_tbl[lua.vars.player_state].fake_limit_left)
+            local fake_limit_right = ui.get(antiaim_builder_tbl[lua.vars.player_state].fake_limit_right)
+            local fake_limit_delay_ticks = ui.get(antiaim_builder_tbl[lua.vars.player_state].fake_limit_delay_ticks)
+            local fake_limit_left_delayed = ui.get(antiaim_builder_tbl[lua.vars.player_state].fake_limit_left_delayed)
+            local fake_limit_right_delayed = ui.get(antiaim_builder_tbl[lua.vars.player_state].fake_limit_right_delayed)
+
+            if body_yaw_mode == "Static" then
+                desync_functions._run(cmd, fake_limit, 180, 89)
+            elseif body_yaw_mode == "Jitter" then
+                desync_functions._run(cmd, globals.tickcount() % 4 >= 2 and -fake_limit_left or fake_limit_right, 180, 89)
+            elseif body_yaw_mode == "Delayed Jitter" then
+                desync_functions._run(cmd, globals.tickcount() % (20 * (0.1 + fake_limit_delay_ticks/10)) >= (10 * (0.1 + fake_limit_delay_ticks/10)) and -fake_limit_left_delayed or fake_limit_right_delayed, 180, 89)
+            else
+                return
+            end
+
+            ui.set(refs.bodyyaw[2], 0)
+            ui.set(refs.freestanding_bodyyaw, false)
+        elseif not ui.get(antiaim_builder_tbl[lua.vars.player_state].enable_state) then
+            ui.set(refs.pitch[1], "Off")
+            ui.set(refs.yaw_base, "Local view")
+            ui.set(refs.yaw[1], "Off")
+            ui.set(refs.yaw[2], 0)
+            ui.set(refs.yawjitter[1], "Off")
+            ui.set(refs.yawjitter[2], 0)
+            ui.set(refs.bodyyaw[1], "Off")
+            ui.set(refs.bodyyaw[2], 0)
+            ui.set(refs.roll, 0)
+        end
+    end,
+
+    fast_ladder = function(cmd)
+        if entity.get_prop(entity.get_local_player(), "m_MoveType") ~= 9 or cmd.forwardmove == 0 then return end
+
+        if not ui.get(menu.antiaim_tab.fast_ladder) then return end
+
+		local camera_pitch, camera_yaw = client.camera_angles()
+		local descending = cmd.forwardmove < 0 or camera_pitch > 45
+
+        if entity.get_prop(entity.get_local_player(), "m_MoveType") == 9 then
+            if cmd.forwardmove ~= 0 then
+                cmd.pitch = 89.0
+                cmd.yaw = cmd.yaw + 90.0
+                cmd.in_moveleft, cmd.in_moveright = descending and 1 or 0, not descending and 1 or 0
+                cmd.in_forward, cmd.in_back = descending and 1 or 0, not descending and 1 or 0
+        
+                if cmd.sidemove == 0 then
+                    cmd.move_yaw = cmd.move_yaw + 90
+                elseif cmd.sidemove > 0 then
+                    cmd.move_yaw = cmd.move_yaw + (cmd.forwardmove > 0 and 40 or 160)
+                else
+                    cmd.move_yaw = cmd.move_yaw + (cmd.forwardmove > 0 and 160 or 40)
+                end
+            end
+        end
+    end,
+
+    safety_options = {
+
+        random_aa_on_warmup = function(cmd)
+
+            if antiaim_functions.onuse_antiaim or entity.get_prop(entity.get_all("CCSGameRulesProxy")[1],"m_bWarmupPeriod") == 0 then return end
+    
+            if lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Random anti-aim") and lua.funcs.table_contains(ui.get(menu.antiaim_tab.random_antiaim_conditions), "Warmup") then
+                ui.set(refs.pitch[1], "Random")
+                ui.set(refs.yaw_base, "At targets")
+                ui.set(refs.yaw[1], "180")
+                ui.set(refs.yaw[2], -math.fmod(globals.curtime() * 960, 360) + 180)
+                ui.set(refs.yawjitter[1], "Random")
+                ui.set(refs.yawjitter[2], 60)
+                ui.set(refs.bodyyaw[2], 0)
+                desync_functions._run(cmd, 48, 180, 89)
+            end
+        end,
+
+        random_aa_on_freeze = function(cmd)
+
+            if antiaim_functions.onuse_antiaim or entity.get_prop(entity.get_all("CCSGameRulesProxy")[1],"m_bFreezePeriod") == 0 then return end
+    
+            if lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Random anti-aim") and lua.funcs.table_contains(ui.get(menu.antiaim_tab.random_antiaim_conditions), "Freeze time") then
+                cmd.pitch = client.random_int(-89, 89)
+                cmd.yaw = cmd.yaw + (-math.fmod(globals.curtime() * 960, 360) + 180)
+                desync_functions._run(cmd, 48, 180, 89)
+            end
+        end,
+
+        random_aa_on_round_end = function(cmd)
+
+            if antiaim_functions.onuse_antiaim or not antiaim_functions.round_end then return end
+    
+            if lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Random anti-aim") and lua.funcs.table_contains(ui.get(menu.antiaim_tab.random_antiaim_conditions), "Round end") then
+                ui.set(refs.pitch[1], "Random")
+                ui.set(refs.yaw_base, "At targets")
+                ui.set(refs.yaw[1], "180")
+                ui.set(refs.yaw[2], -math.fmod(globals.curtime() * 960, 360) + 180)
+                ui.set(refs.yawjitter[1], "Random")
+                ui.set(refs.yawjitter[2], 60)
+                ui.set(refs.bodyyaw[2], 0)
+                desync_functions._run(cmd, 48, 180, 89)
+            end
+        end,
+
+        safe_knife = function(cmd)
+
+            if antiaim_functions.onuse_antiaim or antiaim_functions.avoid_backstab_bool then return end
+    
+            if lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Safe knife") and lua.vars.player_state == 7 and entity.get_classname(entity.get_player_weapon(entity.get_local_player())) == "CKnife" then
+                ui.set(refs.pitch[1], "Minimal")
+                ui.set(refs.yaw_base, "At targets")
+                ui.set(refs.yaw[1], "180")
+                ui.set(refs.yaw[2], 8)
+                ui.set(refs.yawjitter[1], "Random")
+                ui.set(refs.yawjitter[2], 10)
+                ui.set(refs.bodyyaw[2], 0)
+                desync_functions._run(cmd, 48, 180, 89)
+                antiaim_functions.safe_knife = true
+            end
+
+            antiaim_functions.safe_knife = false
+        end,
+
+        safe_head = function(cmd)
+
+            local doubletap_active = ui.get(refs.doubletap[1]) and ui.get(refs.doubletap[2])
+            local onshot_active = ui.get(refs.onshot[1]) and ui.get(refs.onshot[2])
+
+            if antiaim_functions.onuse_antiaim or antiaim_functions.avoid_backstab_bool then return end
+
+            if not lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Safe head") then return end
+    
+            if lua.funcs.table_contains(ui.get(menu.antiaim_tab.safe_head_states), "On Zeus") and entity.get_classname(entity.get_player_weapon(entity.get_local_player())) == "CWeaponTaser" then
+                ui.set(refs.pitch[1], "Minimal")
+                ui.set(refs.yaw_base, "At targets")
+                ui.set(refs.yaw[1], "180")
+                ui.set(refs.yaw[2], 0)
+                ui.set(refs.yawjitter[1], "Off")
+                ui.set(refs.yawjitter[2], 0)
+                ui.set(refs.bodyyaw[2], 0)
+                desync_functions._run(cmd, math.sin(globals.realtime() * 64) * -35 + 10, 180, 89)
+            end
+
+            if lua.funcs.table_contains(ui.get(menu.antiaim_tab.safe_head_states), lua.vars.int_to_string[lua.vars.player_state]) then
+                if not doubletap_active and not onshot_active then
+                    ui.set(refs.pitch[1], "Minimal")
+                    ui.set(refs.yaw_base, "At targets")
+                    ui.set(refs.yaw[1], "180")
+                    ui.set(refs.yaw[2], 0)
+                    ui.set(refs.yawjitter[1], "Off")
+                    ui.set(refs.yawjitter[2], 0)
+                    ui.set(refs.bodyyaw[2], 0)
+                    desync_functions._run(cmd, math.sin(globals.realtime() * 8) * -58 + 15, 180, 89)
+                end
+            end
+        end,
+
+        static_on_height_advantage = function(cmd)
+
+
+            if antiaim_functions.onuse_antiaim or antiaim_functions.avoid_backstab_bool or not client.current_threat() then return end
+
+            local lp_origin = vector(entity.get_origin(entity.get_local_player()))
+            local target_origin = vector(entity.get_origin(client.current_threat()))
+
+            if lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Static on height advantage") and lua.funcs.table_contains(ui.get(menu.antiaim_tab.static_on_height_states), lua.vars.int_to_string[lua.vars.player_state]) then
+                if lp_origin.z > target_origin.z + 115 then
+                    ui.set(refs.pitch[1], "Minimal")
+                    ui.set(refs.yaw_base, "At targets")
+                    ui.set(refs.yaw[1], "180")
+                    ui.set(refs.yaw[2], 0)
+                    ui.set(refs.yawjitter[1], "Off")
+                    ui.set(refs.yawjitter[2], 0)
+                    ui.set(refs.bodyyaw[2], 0)
+                end
+            end
+        end,
+
+        avoid_backstab = function()
+
+            if not entity.get_local_player() or not entity.is_alive(entity.get_local_player()) then return end
+    
+            if antiaim_functions.onuse_antiaim then return end
+    
+            if lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Avoid backstab") then
+                local players = entity.get_players(true)
+                for _, player in ipairs(players) do
+                    local distance = vector(entity.get_origin(entity.get_local_player())):dist(vector(entity.get_origin(player)))
+                    if entity.get_classname(entity.get_player_weapon(player)) == "CKnife" and distance <= 300 then
+                        ui.set(refs.yaw[2], 180)
+                        ui.set(refs.pitch[1], "Off")
+                        antiaim_functions.avoid_backstab_bool = true
+                    end
+                end
+            end
+        end,
+    },
+
+    legit_antiaim = function(cmd)
+
+        if not entity.get_local_player() or not entity.is_alive(entity.get_local_player()) then return end
+
+        antiaim_functions.onuse_antiaim = false
+
+        if ui.get(menu.antiaim_tab.onuse_antiaim_hotkey) then
+            if entity.get_classname(entity.get_player_weapon(entity.get_local_player())) == "CC4" then return end
+
+            local body_yaw_mode = ui.get(antiaim_builder_tbl[lua.vars.player_state].bodyyaw)
+
+            local should_disable = false
+            local planted_bomb = entity.get_all("CPlantedC4")[1]
+
+            if planted_bomb then
+                local bomb_distance = vector(entity.get_origin(entity.get_local_player())):dist(vector(entity.get_origin(planted_bomb)))
+                should_disable = bomb_distance <= 64 and entity.get_prop(entity.get_local_player(), "m_iTeamNum") == 3
+            end
+
+            if not should_disable then
+                local pitch, yaw = client.camera_angles()
+                local direct_vec = vector(lua.funcs.vec_angles(pitch, yaw))
+                local eye_pos = vector(client.eye_position())
+                local _, ent = client.trace_line(entity.get_local_player(), eye_pos.x, eye_pos.y, eye_pos.z, eye_pos.x + (direct_vec.x * 8192), eye_pos.y + (direct_vec.y * 8192), eye_pos.z + (direct_vec.z * 8192))
+
+                if ent and ent ~= -1 then
+                    local classname = entity.get_classname(ent)
+                    if classname == "CPropDoorRotating" or classname == "CHostage" then
+                        should_disable = true
+                    end
+                end
+            end
+            
+
+            if not should_disable then
+                antiaim_functions.onuse_antiaim = true
+                ui.set(refs.pitch[1], "Off")
+                ui.set(refs.yaw[2], 180)
+                ui.set(refs.yawjitter[2], 0)
+                ui.set(refs.roll, 0)
+                cmd.roll = 0
+                if ui.get(menu.antiaim_tab.onuse_antiaim_mode) == "Static" then
+                    desync_functions._run(cmd, ui.get(menu.antiaim_tab.onuse_antiaim_side) == "Left" and -60 or 60, 0, 0)
+                else
+                    desync_functions._run(cmd, globals.tickcount() % 4 >= 2 and -60 or 60, 0, 0)
+                end
+            end
+
+            cmd.in_use = should_disable and 1 or 0
+        end
+    end,
+
+    freestanding_setup = function()
+
+        current_player_state = lua.vars.int_to_string[lua.vars.player_state]
+        current_freestand_disablers = ui.get(menu.antiaim_tab.freestand_disablers)
+
+        if lua.funcs.table_contains(current_freestand_disablers, current_player_state) then
+            return
+        end
+
+        if ui.get(menu.antiaim_tab.freestand_hotkey) then
+            ui.set(refs.bodyyaw[1], "Opposite")
+            ui.set(refs.freestanding[2], "Always on")
+            ui.set(refs.freestanding[1], true)
+            if ui.get(menu.antiaim_tab.freestand_mode) == "Static" then
+                ui.set(refs.yaw[2], 0)
+                ui.set(refs.yawjitter[2], 0)
+            end
+        else
+            ui.set(refs.freestanding[1], false)
+            ui.set(refs.freestanding[2], "On hotkey")
+        end
+    end,
+
+    manual_antiaim = function()
+
+        local keybinds = {
+            forward = ui.get(menu.antiaim_tab.manual_antiaim_forward),
+            left = ui.get(menu.antiaim_tab.manual_antiaim_left),
+            right = ui.get(menu.antiaim_tab.manual_antiaim_right),
+        }
+    
+        local last_keybinds = {
+            forward = antiaim_functions.manual_antiaim_tbl.last_forward,
+            left = antiaim_functions.manual_antiaim_tbl.last_left,
+            right = antiaim_functions.manual_antiaim_tbl.last_right,
+        }
+    
+        local keybind_idx = {
+            forward = 1, 
+            left = 2, 
+            right = 3
+        }
+    
+        if last_keybinds.forward == nil then
+            antiaim_functions.manual_antiaim_tbl.last_forward = keybinds.forward
+            antiaim_functions.manual_antiaim_tbl.last_left = keybinds.left
+            antiaim_functions.manual_antiaim_tbl.last_right = keybinds.right
+            return
+        end
+    
+        for key, value in pairs(keybinds) do
+            if value ~= last_keybinds[key] then
+                if antiaim_functions.manual_antiaim_tbl.manual_side == keybind_idx[key] then
+                    antiaim_functions.manual_antiaim_tbl.manual_side = nil
+                else
+                    antiaim_functions.manual_antiaim_tbl.manual_side = keybind_idx[key]
+                end
+            end
+        end
+    
+        antiaim_functions.manual_antiaim_tbl.last_forward = keybinds.forward
+        antiaim_functions.manual_antiaim_tbl.last_left = keybinds.left
+        antiaim_functions.manual_antiaim_tbl.last_right = keybinds.right
+    
+        local manual_side = antiaim_functions.manual_antiaim_tbl.manual_side
+        if manual_side then antiaim_functions.manual_antiaim_bool = true else antiaim_functions.manual_antiaim_bool = false end
+        if not manual_side then return end
+
+        ui.set(
+            refs.yaw[2],
+            manual_side == 1 and
+                ((ui.get(refs.yaw[2]) + ({180, 90, -90})[manual_side] + 180) % 360 - 180)
+            or
+                ((ui.get(refs.yaw[2]) + ({180, 90, -90})[manual_side]) % 360 - 180)
+            )
+    end,
+
+    edge_yaw = function()
+        local edge_yaw_ref = ui.get(menu.antiaim_tab.edge_yaw)
+
+        if edge_yaw_ref and not antiaim_functions.manual_antiaim_bool then
+            ui.set(refs.edge_yaw, true)
+        else
+            ui.set(refs.edge_yaw, false)
+        end
+    end,
+}
+
+visual_functions = {}
+
+visual_functions = {
+
+    legs_cached = false,
+    ground_ticks = 0,
+
+    damage_indicator = function()
+
+        if not entity.get_local_player() or not entity.is_alive(entity.get_local_player()) then return end
+
+        local _x, _y = client.screen_size()
+        local min_damage_indicator = ui.get(menu.misc_tab.minimum_damage_indicator)
+        local player_weapon_classname = entity.get_classname(entity.get_player_weapon(entity.get_local_player()))
+
+        local grenade_and_knife_classes = {
+            CHEGrenade = true,
+            CSmokeGrenade = true,
+            CMolotovGrenade = true,
+            CFlashbang = true,
+            CDecoyGrenade = true,
+            CKnife = true,
+            CWeaponTaser = true
+        }
+        
+        if min_damage_indicator == "Off" or grenade_and_knife_classes[player_weapon_classname] then
+            return
+        end
+        
+        local damage_override_active = ui.get(refs.damage_override[1]) and ui.get(refs.damage_override[2])
+        local damage_string = min_damage_indicator == "Always" and (damage_override_active and ui.get(refs.damage_override[3]) or ui.get(refs.damage[1]))
+                or (min_damage_indicator == "On override" and damage_override_active and ui.get(refs.damage_override[3]) or normalize)
+
+        if damage_string ~= nil then
+            renderer.text(_x / 2 + 5, _y / 2 - 20, 255, 255, 255, 255, "", 0, tostring(damage_string))
+        end
+    end,
+
+    anim_breakers = function()
+
+        if not entity.get_local_player() or not entity.is_alive(entity.get_local_player()) then return end
+
+        local flags = entity.get_prop(entity.get_local_player(), "m_fFlags")
+        visual_functions.ground_ticks = bit.band(flags, 1) == 0 and 0 or (visual_functions.ground_ticks < 5 and visual_functions.ground_ticks + 1 or visual_functions.ground_ticks)
+
+        local animations = ui.get(menu.misc_tab.animations)
+
+        if lua.funcs.table_contains(animations, "Static legs") then
+            entity.set_prop(entity.get_local_player(), "m_flPoseParameter", 1, 6)
+        end
+
+        if lua.funcs.table_contains(animations, "Leg fucker") then
+            if not visual_functions.legs_cached then
+                visual_functions.legs_cached = ui.get(refs.leg_movement)
+            end
+            ui.set_visible(refs.leg_movement, false)
+            if globals.tickcount() % 4 <= 1 then
+                entity.set_prop(entity.get_local_player(), "m_flPoseParameter", 0, 0)
+            end
+            ui.set(refs.leg_movement, "Always slide")
+        elseif visual_functions.legs_cached then
+            ui.set_visible(refs.leg_movement, true)
+            ui.set(refs.leg_movement, visual_functions.legs_cached)
+            visual_functions.legs_cached = false
+        end
+
+        if lua.funcs.table_contains(ui.get(menu.misc_tab.animations), "0 pitch on landing") then
+            visual_functions.ground_ticks = bit.band(flags, 1) == 1 and visual_functions.ground_ticks + 1 or 0
+
+            if visual_functions.ground_ticks > 25 and visual_functions.ground_ticks < 225 then
+                entity.set_prop(entity.get_local_player(), "m_flPoseParameter", 0.5, 12)
+            end
+        end
+    end,
+
+    render_watermark = function()
+        local width, height = client.screen_size()
+
+        watermark_color_array = lua.funcs.create_color_array(lua_color[1], lua_color[2], lua_color[3], "ephemeral [reborn]")
+        color_array_string = string.format("\a%se\a%sp\a%sh\a%se\a%sm\a%se\a%sr\a%sa\a%sl [reborn]", lua.funcs.rgba_hex(unpack(watermark_color_array[1])), lua.funcs.rgba_hex(unpack(watermark_color_array[2])), lua.funcs.rgba_hex(unpack(watermark_color_array[3])), lua.funcs.rgba_hex(unpack(watermark_color_array[4])), lua.funcs.rgba_hex(unpack(watermark_color_array[5])), lua.funcs.rgba_hex(unpack(watermark_color_array[6])),  lua.funcs.rgba_hex(unpack(watermark_color_array[7])),  lua.funcs.rgba_hex(unpack(watermark_color_array[8])),  lua.funcs.rgba_hex(unpack(watermark_color_array[9])) ) .. lua.funcs.hex({lua_color[1], lua_color[2], lua_color[3]})
+
+        renderer.text(width / 2 - renderer.measure_text("o", "ephemeral [reborn]") / 2, height - 26, 220, 220, 220, 255, "o", 0, color_array_string)
+        renderer.text(width / 2 - renderer.measure_text("o", "dsc.gg/ephemeral-lua") / 2, height - 15, lua_color[1], lua_color[2], lua_color[3], 255, "o", 0, "dsc.gg/ephemeral-lua")
+    end,
+}
+
+ui.update(menu.configuration_tab.list, config_system.load_config_list())
+
+if database.read(lua.database.configs) == nil then
+    database.write(lua.database.configs, {})
+end
+
+ui.set(menu.configuration_tab.name, #database.read(lua.database.configs) == 0 and "" or database.read(lua.database.configs)[ui.get(menu.configuration_tab.list)+1].name)
+ui.set_callback(menu.configuration_tab.list, function(value)
+    local protected = function()
+        if value == nil then return end
+        local name = ""
+    
+        local configs = config_system.load_config_list()
+        if configs == nil then return end
+    
+        name = configs[ui.get(value)+1] or ""
+    
+        ui.set(menu.configuration_tab.name, name)
+    end
+
+    if pcall(protected) then
+
+    end
+end)
+
+ui.set_callback(menu.configuration_tab.load, function()
+    local name = ui.get(menu.configuration_tab.name)
+    if name == "" then return end
+    local protected = function()
+        config_system.load_config(name)
+    end
+
+    local status, err = pcall(protected)
+
+    if status then
+        client.color_log(255, 255, 255, "Successfully loaded settings \0")
+        client.color_log(lua_color[1], lua_color[2], lua_color[3], name)
+    else
+        client.color_log(255, 0, 0, "Failed to load settings \0")
+        client.color_log(lua_color[1], lua_color[2], lua_color[3], name .. "\0 : ")
+        client.color_log(255, 0, 0, err)
+    end
+end)
+
+ui.set_callback(menu.configuration_tab.save, function()
+    local name = ui.get(menu.configuration_tab.name)
+    if name == "" then return end
+
+    local protected = function()
+        config_system.save_config(name)
+        ui.update(menu.configuration_tab.list, config_system.load_config_list())
+    end
+
+    status, err = pcall(protected)
+
+    if status then
+        client.color_log(255, 255, 255, "Successfully saved settings for \0")
+        client.color_log(lua_color[1], lua_color[2], lua_color[3], name)
+    else
+        client.color_log(255, 0, 0, "Failed to save settings for \0")
+        client.color_log(lua_color[1], lua_color[2], lua_color[3], name .. "\0 :")
+        client.color_log(255, 0, 0, err)
+    end
+end)
+
+ui.set_callback(menu.configuration_tab.delete, function()
+    local name = ui.get(menu.configuration_tab.name)
+    if name == "" then return end
+    if config_system.delete_config(name) == false then
+        ui.update(menu.configuration_tab.list, config_system.load_config_list())
+        return
+    end
+
+    local protected = function()
+        config_system.delete_config(name)
+    end
+
+    status, err = pcall(protected)
+
+    if status then
+        ui.update(menu.configuration_tab.list, config_system.load_config_list())
+        ui.set(menu.configuration_tab.list, #presets + #database.read(lua.database.configs) - #database.read(lua.database.configs))
+        ui.set(menu.configuration_tab.name, #database.read(lua.database.configs) == 0 and "" or config_system.load_config_list()[#presets + #database.read(lua.database.configs) - #database.read(lua.database.configs)+1])
+        client.color_log(255, 255, 255, "Successfully deleted \0")
+        client.color_log(lua_color[1], lua_color[2], lua_color[3], name)
+    else
+        client.color_log(255, 0, 0, "Failed to delete \0")
+        client.color_log(lua_color[1], lua_color[2], lua_color[3], name .. "\0 : ")
+        client.color_log(255, 0, 0, err)
+    end
+end)
+
+ui.set_callback(menu.configuration_tab.import, function()
+    local protected = function()
+        config_system.import_settings()
+    end
+
+    local status, err = pcall(protected)
+    
+    if status then
+        client.color_log(255, 255, 255, "Successfully imported settings")
+    else
+        client.color_log(255, 0, 0, "Failed to import settings: ", err)
+    end
+end)
+
+
+ui.set_callback(menu.configuration_tab.export, function()
+    local name = ui.get(menu.configuration_tab.name)
+    if name == "" then return end
+
+    local protected = function()
+        config_system.export_settings(name)
+    end
+
+    if pcall(protected) then
+        client.color_log(255, 255, 255, "Successfully exported settings from \0")
+        client.color_log(lua_color[1], lua_color[2], lua_color[3], name)
+    else
+        client.color_log(255, 0, 0, "Failed to export settings from \0")
+        client.color_log(lua_color[1], lua_color[2], lua_color[3],  name .. "\0 : ")
+        client.color_log(255, 0, 0, err)
+    end
+end)
+
+client.set_event_callback("paint_ui", function()
+    lua.vars.active_state = lua.vars.string_to_int[ui.get(menu.antiaim_builder_tab.state)]
+
+    ui.set_visible(tab_selection, true)
+    ui.set_visible(antiaim_tabs, ui.get(tab_selection) == "Anti-aim")
+    is_antiaim_tab = ui.get(tab_selection) == "Anti-aim" and ui.get(antiaim_tabs) == "Keybinds"
+    is_antiaim_builder_tab = ui.get(tab_selection) == "Anti-aim" and ui.get(antiaim_tabs) == "Builder"
+    is_misc_tab = ui.get(tab_selection) == "Misc"
+    is_config_tab = ui.get(tab_selection) == "Config"
+
+    name_color_array = lua.funcs.create_color_array(lua_color[1], lua_color[2], lua_color[3], "Ephemeral [Reborn]")
+    ui.set(label, string.format("\a%sE\a%sp\a%sh\a%se\a%sm\a%se\a%sr\a%sa\a%sl [Reborn]", lua.funcs.rgba_hex(unpack(name_color_array[1])), lua.funcs.rgba_hex(unpack(name_color_array[2])), lua.funcs.rgba_hex(unpack(name_color_array[3])), lua.funcs.rgba_hex(unpack(name_color_array[4])), lua.funcs.rgba_hex(unpack(name_color_array[5])), lua.funcs.rgba_hex(unpack(name_color_array[6])),  lua.funcs.rgba_hex(unpack(name_color_array[7])),  lua.funcs.rgba_hex(unpack(name_color_array[8])),  lua.funcs.rgba_hex(unpack(name_color_array[9])) ) .. lua.funcs.hex({lua_color[1], lua_color[2], lua_color[3]}))
+
+    ui.set(antiaim_builder_tbl[1].enable_state, true)
+
+    for i = 1, #lua.vars.player_states do
+        local state_enabled = ui.get(antiaim_builder_tbl[i].enable_state)
+        ui.set_visible(antiaim_builder_tbl[i].enable_state, lua.vars.active_state == i and i~=1 and is_antiaim_builder_tab)
+        ui.set_visible(antiaim_builder_tbl[i].state_disablers, lua.vars.active_state == 9 and i == 9 and is_antiaim_builder_tab and ui.get(antiaim_builder_tbl[9].enable_state))
+        ui.set_visible(antiaim_builder_tbl[i].pitch, lua.vars.active_state == i and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].pitch_slider , lua.vars.active_state == i and is_antiaim_builder_tab and state_enabled and ui.get(antiaim_builder_tbl[i].pitch) == "Custom")
+        ui.set_visible(antiaim_builder_tbl[i].yaw_base, lua.vars.active_state == i and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].yaw, lua.vars.active_state == i and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].yaw_static, lua.vars.active_state == i and ui.get(antiaim_builder_tbl[i].yaw) == "Static" and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].yaw_left, lua.vars.active_state == i and ui.get(antiaim_builder_tbl[i].yaw) == "L&R" and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].yaw_right, lua.vars.active_state == i and ui.get(antiaim_builder_tbl[i].yaw) == "L&R" and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].yawjitter, lua.vars.active_state == i and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].yawjitter_random, lua.vars.active_state == i and ui.get(antiaim_builder_tbl[i].yawjitter) == "Random" and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].bodyyaw, lua.vars.active_state == i and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].fake_limit, lua.vars.active_state == i and ui.get(antiaim_builder_tbl[i].bodyyaw) == "Static" and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].fake_limit_left, lua.vars.active_state == i and ui.get(antiaim_builder_tbl[i].bodyyaw) == "Jitter" and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].fake_limit_right, lua.vars.active_state == i and ui.get(antiaim_builder_tbl[i].bodyyaw) == "Jitter" and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].fake_limit_left_delayed, lua.vars.active_state == i and ui.get(antiaim_builder_tbl[i].bodyyaw) == "Delayed Jitter" and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].fake_limit_right_delayed, lua.vars.active_state == i and ui.get(antiaim_builder_tbl[i].bodyyaw) == "Delayed Jitter" and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].fake_limit_delay_ticks, lua.vars.active_state == i and ui.get(antiaim_builder_tbl[i].bodyyaw) == "Delayed Jitter" and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].force_defensive_exploit, lua.vars.active_state == i and i ~= 9 and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].defensive_antiaim_selection, lua.vars.active_state == i and i ~= 9 and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].defensive_pitch_options, lua.vars.active_state == i and i ~= 9 and lua.funcs.table_contains(ui.get(antiaim_builder_tbl[i].defensive_antiaim_selection), "Pitch") and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].defensive_pitch_flick_degree1, lua.vars.active_state == i and i ~= 9 and lua.funcs.table_contains(ui.get(antiaim_builder_tbl[i].defensive_antiaim_selection), "Pitch") and ui.get(antiaim_builder_tbl[i].defensive_pitch_options) == "Flick" and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].defensive_pitch_flick_degree2, lua.vars.active_state == i and i ~= 9 and lua.funcs.table_contains(ui.get(antiaim_builder_tbl[i].defensive_antiaim_selection), "Pitch") and ui.get(antiaim_builder_tbl[i].defensive_pitch_options) == "Flick" and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].defensive_pitch_custom, lua.vars.active_state == i and i ~= 9 and lua.funcs.table_contains(ui.get(antiaim_builder_tbl[i].defensive_antiaim_selection), "Pitch") and ui.get(antiaim_builder_tbl[i].defensive_pitch_options) == "Custom" and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].defensive_yaw_options, lua.vars.active_state == i and i ~= 9 and lua.funcs.table_contains(ui.get(antiaim_builder_tbl[i].defensive_antiaim_selection), "Yaw") and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].defensive_yaw_flick_angle1, lua.vars.active_state == i and i ~= 9 and lua.funcs.table_contains(ui.get(antiaim_builder_tbl[i].defensive_antiaim_selection), "Yaw") and ui.get(antiaim_builder_tbl[i].defensive_yaw_options) == "Flick" and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].defensive_yaw_flick_angle2, lua.vars.active_state == i and i ~= 9 and lua.funcs.table_contains(ui.get(antiaim_builder_tbl[i].defensive_antiaim_selection), "Yaw") and ui.get(antiaim_builder_tbl[i].defensive_yaw_options) == "Flick" and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].defensive_yaw_spin_range, lua.vars.active_state == i and i ~= 9 and lua.funcs.table_contains(ui.get(antiaim_builder_tbl[i].defensive_antiaim_selection), "Yaw") and ui.get(antiaim_builder_tbl[i].defensive_yaw_options) == "Spin" and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].defensive_yaw_spin_speed, lua.vars.active_state == i and i ~= 9 and lua.funcs.table_contains(ui.get(antiaim_builder_tbl[i].defensive_antiaim_selection), "Yaw") and ui.get(antiaim_builder_tbl[i].defensive_yaw_options) == "Spin" and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].defensive_yaw_distortion_range, lua.vars.active_state == i and i ~= 9 and lua.funcs.table_contains(ui.get(antiaim_builder_tbl[i].defensive_antiaim_selection), "Yaw") and ui.get(antiaim_builder_tbl[i].defensive_yaw_options) == "Distortion" and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].defensive_yaw_distortion_speed, lua.vars.active_state == i and i ~= 9 and lua.funcs.table_contains(ui.get(antiaim_builder_tbl[i].defensive_antiaim_selection), "Yaw") and ui.get(antiaim_builder_tbl[i].defensive_yaw_options) == "Distortion" and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].defensive_yaw_random_range, lua.vars.active_state == i and i ~= 9 and lua.funcs.table_contains(ui.get(antiaim_builder_tbl[i].defensive_antiaim_selection), "Yaw") and ui.get(antiaim_builder_tbl[i].defensive_yaw_options) == "Random" and is_antiaim_builder_tab and state_enabled)
+    end
+
+    for i, feature in pairs(menu.antiaim_tab) do
+
+        ui.set_visible(41, is_antiaim_tab and lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Random anti-aim"))
+        ui.set_visible(42, is_antiaim_tab and lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Safe head"))
+        ui.set_visible(43, is_antiaim_tab and lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Static on height advantage"))
+        ui.set_visible(46, is_antiaim_tab and ui.get(menu.antiaim_tab.onuse_antiaim_mode) == "Static")
+
+        if type(feature) ~= "table" then
+            ui.set_visible(feature, is_antiaim_tab)
+        end
+	end 
+
+    for i, feature in pairs(menu.antiaim_builder_tab) do
+		ui.set_visible(feature, is_antiaim_builder_tab)
+	end
+
+    for i, feature in pairs(menu.misc_tab) do
+        if type(feature) ~= "table" then
+            ui.set_visible(feature, is_misc_tab)
+        end
+	end
+
+    for i, feature in pairs(menu.configuration_tab) do
+		ui.set_visible(feature, is_config_tab)
+	end
+
+    lua.funcs.reset_antiaim_tab(false)
+end)
+
+client.set_event_callback("setup_command", function(cmd)
+
+    client.exec("sv_maxunlag 0.175")
+    client.exec("fps_max 0")
+    client.exec("fps_max_menu 0")
+
+    ui.set(refs.delay_shot, ui.get(antiaim_functions.delay_shot))
+
+    antiaim_functions.antiaim_state(cmd)
+    antiaim_functions.antiaim_handle(cmd)
+    antiaim_functions.fast_ladder(cmd)
+    antiaim_functions.safety_options.random_aa_on_warmup(cmd)
+    antiaim_functions.safety_options.random_aa_on_freeze(cmd)
+    antiaim_functions.safety_options.random_aa_on_round_end(cmd)
+    antiaim_functions.safety_options.safe_knife(cmd)
+    antiaim_functions.safety_options.safe_head(cmd)
+    antiaim_functions.safety_options.static_on_height_advantage(cmd)
+    antiaim_functions.safety_options.avoid_backstab()
+    antiaim_functions.legit_antiaim(cmd)
+    antiaim_functions.freestanding_setup()
+    antiaim_functions.manual_antiaim()
+    antiaim_functions.edge_yaw()
+end)
+
+client.set_event_callback("round_end", function(cmd)
+    antiaim_functions.round_end = true
+end)
+
+client.set_event_callback("round_prestart", function(cmd)
+    antiaim_functions.round_end = false
+end)
+
+client.set_event_callback("net_update_start", function()
+    defensive_functions._run()
+end)
+
+client.set_event_callback("pre_render", function()
+    visual_functions.anim_breakers()
+end)
+
+client.set_event_callback("paint_ui", function()
+    visual_functions.render_watermark()
+end)
+
+client.set_event_callback("paint", function()
+    visual_functions.damage_indicator()
+end)
+
+client.set_event_callback("shutdown", function()
+    ui.set(refs.fakelag_limit, 15)
+    client.exec("sv_maxunlag 0.2")
+    lua.funcs.reset_antiaim_tab(true)
+    lua.funcs.default_antiaim_tab()
+end)
