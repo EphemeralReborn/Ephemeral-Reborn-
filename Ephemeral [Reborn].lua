@@ -227,6 +227,7 @@ local menu = {
     misc_tab = {
         animations = ui.new_multiselect(tab, container_aa, "Anim breakers", "Static legs", "Leg fucker", "0 pitch on landing"),
         minimum_damage_indicator = ui.new_combobox(tab, container_aa, "Minimum Damage Indicator", "Off", "On override", "Always"),
+        watermark_position = ui.new_combobox(tab, container_aa, "Watermark", "Left", "Right", "Bottom"),
     },
 
     configuration_tab = {
@@ -1235,12 +1236,26 @@ visual_functions = {
 
     render_watermark = function()
         local width, height = client.screen_size()
+        local _x, _y = 0, 0
+        local watermark_position = ui.get(menu.misc_tab.watermark_position)
+        if watermark_position == "Left" then
+            _x = 75
+            _y = height / 2 - 125
+        elseif watermark_position == "Right" then
+            _x = width - 75
+            _y = height / 2 - 125
+        else
+            _x = width / 2
+            _y = height - 26
+        end
+
+
 
         watermark_color_array = lua.funcs.create_color_array(lua_color[1], lua_color[2], lua_color[3], "ephemeral [reborn]")
         color_array_string = string.format("\a%se\a%sp\a%sh\a%se\a%sm\a%se\a%sr\a%sa\a%sl [reborn]", lua.funcs.rgba_hex(unpack(watermark_color_array[1])), lua.funcs.rgba_hex(unpack(watermark_color_array[2])), lua.funcs.rgba_hex(unpack(watermark_color_array[3])), lua.funcs.rgba_hex(unpack(watermark_color_array[4])), lua.funcs.rgba_hex(unpack(watermark_color_array[5])), lua.funcs.rgba_hex(unpack(watermark_color_array[6])),  lua.funcs.rgba_hex(unpack(watermark_color_array[7])),  lua.funcs.rgba_hex(unpack(watermark_color_array[8])),  lua.funcs.rgba_hex(unpack(watermark_color_array[9])) ) .. lua.funcs.hex({lua_color[1], lua_color[2], lua_color[3]})
 
-        renderer.text(width / 2 - renderer.measure_text("o", "ephemeral [reborn]") / 2, height - 26, 220, 220, 220, 255, "o", 0, color_array_string)
-        renderer.text(width / 2 - renderer.measure_text("o", "dsc.gg/ephemeral-lua") / 2, height - 15, lua_color[1], lua_color[2], lua_color[3], 255, "o", 0, "dsc.gg/ephemeral-lua")
+        renderer.text(_x - renderer.measure_text("b", "ephemeral [reborn]") / 2, _y, 220, 220, 220, 255, "bo", 0, color_array_string)
+        renderer.text(width - renderer.measure_text("o", "dsc.gg/ephemeral-lua") - 5, 5, lua_color[1], lua_color[2], lua_color[3], 255, "o", 0, "dsc.gg/ephemeral-lua")
     end,
 }
 
