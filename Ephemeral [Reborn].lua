@@ -213,10 +213,22 @@ client.color_log(255, 255, 255, " [Reborn]")
 local tab, container_aa, container_fl = "AA", "Anti-aimbot angles", "Fake lag"
 local label = ui.new_label(tab, container_aa, "Ephemeral")
 local tab_selection = ui.new_combobox(tab, container_aa, "\nTab", "Anti-aim", "Misc", "Config")
-local antiaim_tabs = ui.new_combobox(tab, container_aa, "\nAnti-aim Tabs", "Builder", "Keybinds")
+local antiaim_tabs = ui.new_combobox(tab, container_aa, "\nAnti-aim Tabs", "Builder", "Helpers", "Keybinds")
 
 local menu = {
     antiaim_tab = {
+        onuse_antiaim_mode = ui.new_combobox(tab, container_aa, "On-use Antiaim", "Static", "Jitter"),
+        onuse_antiaim_hotkey = ui.new_hotkey(tab, container_aa, "On-use keybind", true),
+        onuse_antiaim_side = ui.new_combobox(tab, container_aa, "Desync side", "Left", "Right"),
+        freestand_mode = ui.new_combobox(tab, container_aa, "Freestanding", "Jitter", "Static"),
+        freestand_hotkey = ui.new_hotkey(tab, container_aa, "Freestand", true),
+        freestand_disablers = ui.new_multiselect(tab, container_aa, "Freestand Disablers", lua.vars.player_states),
+        edge_yaw = ui.new_hotkey(tab, container_aa, "Edge yaw", false),
+        manual_antiaim_forward = ui.new_hotkey(tab, container_aa, "Manual Forward", false),
+        manual_antiaim_left = ui.new_hotkey(tab, container_aa, "Manual Left", false),
+        manual_antiaim_right = ui.new_hotkey(tab, container_aa, "Manual Right", false),
+    },
+    antiaim_helpers_tab = {
         safety_options = ui.new_multiselect(tab, container_aa, "Safety options", "Random anti-aim", "Safe knife", "Safe head", "Static on height advantage", "Avoid backstab", "Secondary swap on target"),
         random_antiaim_conditions = ui.new_multiselect(tab, container_aa, "Random anti-aim conditions", "Warmup", "Freeze time", "Round end"),
         safe_head_states = ui.new_multiselect(tab, container_aa, "Safe head states", "Standing", "Moving", "Slowwalking", "Crouching", "Air", "Air-Crouching", "Crouch-Moving", "On Zeus"),
@@ -224,22 +236,14 @@ local menu = {
         secondary_swap_conditions = ui.new_multiselect(tab, container_aa, "Secondary swap conditions", "Target has knife", "Target has zeus"),
         secondary_swap_weapon = ui.new_combobox(tab, container_aa, "Secondary swap weapon", "Pull pistol", "Pull zeus (Pistol backup)"),
         secondary_swap_distance = ui.new_slider(tab, container_aa, "Secondary swap distance", 200, 700, 300, 1),
-        onuse_antiaim_mode = ui.new_combobox(tab, container_aa, "On-use Antiaim", "Static", "Jitter"),
-        onuse_antiaim_hotkey = ui.new_hotkey(tab, container_aa, "On-use keybind", true),
-        onuse_antiaim_side = ui.new_combobox(tab, container_aa, "Desync side", "Left", "Right"),
-        freestand_mode = ui.new_combobox(tab, container_aa, "Freestanding", "Jitter", "Static"),
-        freestand_hotkey = ui.new_hotkey(tab, container_aa, "Freestand", true),
-        freestand_disablers = ui.new_multiselect(tab, container_aa, "Freestand Disablers", lua.vars.player_states),
         fast_ladder = ui.new_checkbox(tab, container_aa, "Fast ladder"),
-        edge_yaw = ui.new_hotkey(tab, container_aa, "Edge yaw", false),
-        manual_antiaim_forward = ui.new_hotkey(tab, container_aa, "Manual Forward", false),
-        manual_antiaim_left = ui.new_hotkey(tab, container_aa, "Manual Left", false),
-        manual_antiaim_right = ui.new_hotkey(tab, container_aa, "Manual Right", false),
+        fast_ladder_options = ui.new_multiselect(tab, container_aa, "Fast ladder options", "Ascending", "Descending"),
     },
     antiaim_builder_tab = {
         state = ui.new_combobox(tab, container_aa, "Anti-aim state", lua.vars.player_states)
     },
     misc_tab = {
+        fps_boosters = ui.new_multiselect(tab, container_aa, "FPS improvements", "Post Processing", "Vignette", "Bloom", "Shadows", "Blood", "Ragdolls", "Fog", "3D skybox"),
         animations = ui.new_multiselect(tab, container_aa, "Anim breakers", "Static legs", "Leg fucker", "0 pitch on landing"),
         minimum_damage_indicator = ui.new_combobox(tab, container_aa, "Minimum Damage Indicator", "Off", "On override", "Always"),
         watermark_position = ui.new_combobox(tab, container_aa, "Watermark", "Left", "Right", "Bottom"),
@@ -327,6 +331,7 @@ config_system = {
         local db = database.read(lua.database.configs) or {}
         local config_tbl = {
             antiaim = {},
+            antiaim_helpers_tab = {},
             antiaim_tab = {}
         }
     
@@ -340,7 +345,16 @@ config_system = {
                 config_tbl.antiaim[value][k] = ui.get(v)
             end
         end
-    
+
+        for tab_name, tab_settings in pairs(menu) do
+            if tab_name ~= "configuration_tab" then
+                config_tbl.antiaim_helpers_tab[tab_name] = {}
+                for setting_name, setting in pairs(tab_settings) do
+                    config_tbl.antiaim_helpers_tab[tab_name][setting_name] = ui.get(setting)
+                end
+            end
+        end
+
         for tab_name, tab_settings in pairs(menu) do
             if tab_name ~= "configuration_tab" then
                 config_tbl.antiaim_tab[tab_name] = {}
@@ -405,6 +419,14 @@ config_system = {
                 end
             end
         end
+
+        for tab_name, tab_settings in pairs(config.antiaim_helpers_tab or {}) do
+            for setting_name, setting_value in pairs(tab_settings) do
+                if setting_value ~= nil then
+                    ui.set(menu[tab_name][setting_name], setting_value)
+                end
+            end
+        end
         
         for tab_name, tab_settings in pairs(config.antiaim_tab or {}) do
             for setting_name, setting_value in pairs(tab_settings) do
@@ -424,6 +446,14 @@ config_system = {
                 end
             end
         end
+
+        for tab_name, tab_settings in pairs(config.antiaim_helpers_tab or {}) do
+            for setting_name, setting_value in pairs(tab_settings) do
+                if setting_value ~= nil then
+                    ui.set(menu[tab_name][setting_name], setting_value)
+                end
+            end
+        end
         
         for tab_name, tab_settings in pairs(config.antiaim_tab or {}) do
             for setting_name, setting_value in pairs(tab_settings) do
@@ -436,6 +466,7 @@ config_system = {
     export_settings = function(name)
         local config = {
             antiaim = {},
+            antiaim_helpers_tab = {},
             antiaim_tab = {}
         }
 
@@ -443,6 +474,15 @@ config_system = {
             config.antiaim[value] = {}
             for k, v in pairs(antiaim_builder_tbl[key]) do
                 config.antiaim[value][k] = ui.get(v)
+            end
+        end
+
+        for tab_name, tab_settings in pairs(menu) do
+            if tab_name ~= "configuration_tab" then
+                config.antiaim_helpers_tab[tab_name] = {}
+                for setting_name, setting in pairs(tab_settings) do
+                    config.antiaim_helpers_tab[tab_name][setting_name] = ui.get(setting)
+                end
             end
         end
 
@@ -463,7 +503,7 @@ config_system = {
             database.write(configs, {})
         end
     
-        http.get("https://pastebin.com/raw/mh9Ceudd", function(success, response)
+        http.get("https://raw.githubusercontent.com/EphemeralReborn/Ephemeral-Reborn-/main/antiaim_preset", function(success, response)
             if not success then
                 print("Failed to get presets")
                 return
@@ -497,7 +537,7 @@ desync_functions = {
 
         local client_weapon = entity.get_player_weapon(entity.get_local_player())
 
-        if not client_weapon then
+        if not client_weapon or entity.get_prop(entity.get_local_player(), 'm_MoveType') == 9 then
             return false
         end
         
@@ -649,6 +689,7 @@ defensive_functions = {
     _run = function()
         local local_player = entity.get_local_player()
         if not local_player then return end
+        if antiaim_functions.safe_knife then return end
 
         local antiaim_selection = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_antiaim_selection)
         if not (lua.funcs.table_contains(antiaim_selection, "Pitch") or lua.funcs.table_contains(antiaim_selection, "Yaw")) then
@@ -658,7 +699,6 @@ defensive_functions = {
 
         local defensive_check = defensive_functions.defensive_check()
         if defensive_check.active then
-            if antiaim_functions.safe_knife then return end
             if lua.funcs.table_contains(antiaim_selection, "Pitch") then
                 ui.set(refs.pitch[1], "Custom")
                 ui.set(refs.pitch[2], defensive_functions.get_defensive_pitch_values())
@@ -722,7 +762,7 @@ antiaim_functions = {
 
         lua.vars.player_state = get_player_state()
 
-        if ui.get(antiaim_builder_tbl[9].enable_state) and not lua.funcs.table_contains(ui.get(antiaim_builder_tbl[9].state_disablers), lua.vars.int_to_string[lua.vars.player_state]) and not lua.funcs.table_contains(ui.get(menu.antiaim_tab.safe_head_states), lua.vars.int_to_string[lua.vars.player_state]) and not doubletap_active and not onshot_active then
+        if ui.get(antiaim_builder_tbl[9].enable_state) and not lua.funcs.table_contains(ui.get(antiaim_builder_tbl[9].state_disablers), lua.vars.int_to_string[lua.vars.player_state]) and not lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safe_head_states), lua.vars.int_to_string[lua.vars.player_state]) and not doubletap_active and not onshot_active then
             lua.vars.player_state = 9
         end
 
@@ -828,29 +868,48 @@ antiaim_functions = {
     end,
 
     fast_ladder = function(cmd)
-        if entity.get_prop(entity.get_local_player(), "m_MoveType") ~= 9 or cmd.forwardmove == 0 then return end
+        if not ui.get(menu.antiaim_helpers_tab.fast_ladder) then return end
+        local cam_pitch, cam_yaw = client.camera_angles()
 
-        if not ui.get(menu.antiaim_tab.fast_ladder) then return end
-
-		local camera_pitch, camera_yaw = client.camera_angles()
-		local descending = cmd.forwardmove < 0 or camera_pitch > 45
-
-        if entity.get_prop(entity.get_local_player(), "m_MoveType") == 9 then
-            if cmd.forwardmove ~= 0 then
-                cmd.pitch = 89.0
-                cmd.yaw = cmd.yaw + 90.0
-                cmd.in_moveleft, cmd.in_moveright = descending and 1 or 0, not descending and 1 or 0
-                cmd.in_forward, cmd.in_back = descending and 1 or 0, not descending and 1 or 0
+        if entity.get_prop(entity.get_local_player(), 'm_MoveType') == 9 then
         
-                if cmd.sidemove == 0 then
-                    cmd.move_yaw = cmd.move_yaw + 90
-                elseif cmd.sidemove > 0 then
-                    cmd.move_yaw = cmd.move_yaw + (cmd.forwardmove > 0 and 40 or 160)
+            adjust_yaw_and_controls = function(ascending)
+                cmd.pitch = 89
+
+                if ascending then
+                    if cam_pitch < 45 then
+                        cmd.in_moveright = 1
+                        cmd.in_moveleft = 0
+                        cmd.in_forward = 0
+                        cmd.in_back = 1
+                    end 
                 else
-                    cmd.move_yaw = cmd.move_yaw + (cmd.forwardmove > 0 and 160 or 40)
+                    cmd.in_moveleft = 1
+                    cmd.in_moveright = 0
+                    cmd.in_forward = 1
+                    cmd.in_back = 0
+                end
+
+                if cmd.sidemove == 0 then
+                    cmd.yaw = cmd.yaw + 90
+                end
+                if cmd.sidemove < 0 then
+                    cmd.yaw = cmd.yaw + 180
+                end
+                if cmd.sidemove > 0 then
+                    cmd.yaw = cmd.yaw + 45
                 end
             end
+        
+            if lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.fast_ladder_options), "Ascending") and cmd.forwardmove > 0 then
+                adjust_yaw_and_controls(true)
+            end
+        
+            if lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.fast_ladder_options), "Descending") and cmd.forwardmove < 0 then
+                adjust_yaw_and_controls(false)
+            end
         end
+        
     end,
 
     safety_options = {
@@ -859,7 +918,7 @@ antiaim_functions = {
 
             if antiaim_functions.onuse_antiaim or entity.get_prop(entity.get_all("CCSGameRulesProxy")[1],"m_bWarmupPeriod") == 0 then return end
     
-            if lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Random anti-aim") and lua.funcs.table_contains(ui.get(menu.antiaim_tab.random_antiaim_conditions), "Warmup") then
+            if lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Random anti-aim") and lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.random_antiaim_conditions), "Warmup") then
                 ui.set(refs.pitch[1], "Random")
                 ui.set(refs.yaw_base, "At targets")
                 ui.set(refs.yaw[1], "180")
@@ -875,7 +934,7 @@ antiaim_functions = {
 
             if antiaim_functions.onuse_antiaim or entity.get_prop(entity.get_all("CCSGameRulesProxy")[1],"m_bFreezePeriod") == 0 then return end
     
-            if lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Random anti-aim") and lua.funcs.table_contains(ui.get(menu.antiaim_tab.random_antiaim_conditions), "Freeze time") then
+            if lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Random anti-aim") and lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.random_antiaim_conditions), "Freeze time") then
                 cmd.pitch = client.random_int(-89, 89)
                 cmd.yaw = cmd.yaw + (-math.fmod(globals.curtime() * 960, 360) + 180)
                 desync_functions._run(cmd, 48, 180, 89)
@@ -886,7 +945,7 @@ antiaim_functions = {
 
             if antiaim_functions.onuse_antiaim or not antiaim_functions.round_end then return end
     
-            if lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Random anti-aim") and lua.funcs.table_contains(ui.get(menu.antiaim_tab.random_antiaim_conditions), "Round end") then
+            if lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Random anti-aim") and lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.random_antiaim_conditions), "Round end") then
                 ui.set(refs.pitch[1], "Random")
                 ui.set(refs.yaw_base, "At targets")
                 ui.set(refs.yaw[1], "180")
@@ -902,7 +961,7 @@ antiaim_functions = {
 
             if antiaim_functions.onuse_antiaim or antiaim_functions.avoid_backstab_bool then return end
     
-            if lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Safe knife") and lua.vars.player_state == 7 and entity.get_classname(entity.get_player_weapon(entity.get_local_player())) == "CKnife" then
+            if lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Safe knife") and lua.vars.player_state == 7 and entity.get_classname(entity.get_player_weapon(entity.get_local_player())) == "CKnife" then
                 ui.set(refs.pitch[1], "Minimal")
                 ui.set(refs.yaw_base, "At targets")
                 ui.set(refs.yaw[1], "180")
@@ -922,7 +981,7 @@ antiaim_functions = {
             local doubletap_active = ui.get(refs.doubletap[1]) and ui.get(refs.doubletap[2])
             local onshot_active = ui.get(refs.onshot[1]) and ui.get(refs.onshot[2])
 
-            if lua.funcs.table_contains(ui.get(menu.antiaim_tab.safe_head_states), lua.vars.int_to_string[lua.vars.player_state]) then
+            if lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safe_head_states), lua.vars.int_to_string[lua.vars.player_state]) then
                 if not doubletap_active and not onshot_active then
                     ui.set(refs.pitch[1], "Minimal")
                     ui.set(refs.yaw_base, "At targets")
@@ -939,9 +998,9 @@ antiaim_functions = {
         safe_head_on_zeus = function(cmd)
             if antiaim_functions.onuse_antiaim or antiaim_functions.avoid_backstab_bool then return end
 
-            if not lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Safe head") then return end
+            if not lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Safe head") then return end
     
-            if lua.funcs.table_contains(ui.get(menu.antiaim_tab.safe_head_states), "On Zeus") and entity.get_classname(entity.get_player_weapon(entity.get_local_player())) == "CWeaponTaser" then
+            if lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safe_head_states), "On Zeus") and entity.get_classname(entity.get_player_weapon(entity.get_local_player())) == "CWeaponTaser" then
                 ui.set(refs.pitch[1], "Minimal")
                 ui.set(refs.yaw_base, "At targets")
                 ui.set(refs.yaw[1], "180")
@@ -961,7 +1020,7 @@ antiaim_functions = {
             local lp_origin = vector(entity.get_origin(entity.get_local_player()))
             local target_origin = vector(entity.get_origin(client.current_threat()))
 
-            if lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Static on height advantage") and lua.funcs.table_contains(ui.get(menu.antiaim_tab.static_on_height_states), lua.vars.int_to_string[lua.vars.player_state]) then
+            if lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Static on height advantage") and lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.static_on_height_states), lua.vars.int_to_string[lua.vars.player_state]) then
                 if lp_origin.z > target_origin.z + 115 then
                     ui.set(refs.pitch[1], "Minimal")
                     ui.set(refs.yaw_base, "At targets")
@@ -980,7 +1039,7 @@ antiaim_functions = {
     
             if antiaim_functions.onuse_antiaim then return end
     
-            if lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Avoid backstab") then
+            if lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Avoid backstab") then
                 local players = entity.get_players(true)
                 for _, player in ipairs(players) do
                     local distance = vector(entity.get_origin(entity.get_local_player())):dist(vector(entity.get_origin(player)))
@@ -997,11 +1056,11 @@ antiaim_functions = {
             local local_player = entity.get_local_player()
             if not local_player or not entity.is_alive(local_player) then return end
             if antiaim_functions.onuse_antiaim then return end
-            if not lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Secondary swap on target") then return end
+            if not lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Secondary swap on target") then return end
         
-            local secondary_swap_distance = ui.get(menu.antiaim_tab.secondary_swap_distance)
-            local secondary_swap_weapon = ui.get(menu.antiaim_tab.secondary_swap_weapon)
-            local swap_conditions = ui.get(menu.antiaim_tab.secondary_swap_conditions)
+            local secondary_swap_distance = ui.get(menu.antiaim_helpers_tab.secondary_swap_distance)
+            local secondary_swap_weapon = ui.get(menu.antiaim_helpers_tab.secondary_swap_weapon)
+            local swap_conditions = ui.get(menu.antiaim_helpers_tab.secondary_swap_conditions)
         
             local function has_weapon(player, weapon_class)
                 return entity.get_classname(entity.get_player_weapon(player)) == weapon_class
@@ -1064,8 +1123,8 @@ antiaim_functions = {
             end
 
             if not should_disable then
-                local pitch, yaw = client.camera_angles()
-                local direct_vec = vector(lua.funcs.vec_angles(pitch, yaw))
+                local cam_pitch, cam_yaw = client.camera_angles()
+                local direct_vec = vector(lua.funcs.vec_angles(cam_pitch, cam_yaw))
                 local eye_pos = vector(client.eye_position())
                 local _, ent = client.trace_line(entity.get_local_player(), eye_pos.x, eye_pos.y, eye_pos.z, eye_pos.x + (direct_vec.x * 8192), eye_pos.y + (direct_vec.y * 8192), eye_pos.z + (direct_vec.z * 8192))
 
@@ -1191,35 +1250,27 @@ visual_functions = {
     legs_cached = false,
     ground_ticks = 0,
 
-    damage_indicator = function()
-
-        if not entity.get_local_player() or not entity.is_alive(entity.get_local_player()) then return end
-
-        local _x, _y = client.screen_size()
-        local min_damage_indicator = ui.get(menu.misc_tab.minimum_damage_indicator)
-        local player_weapon_classname = entity.get_classname(entity.get_player_weapon(entity.get_local_player()))
-
-        local grenade_and_knife_classes = {
-            CHEGrenade = true,
-            CSmokeGrenade = true,
-            CMolotovGrenade = true,
-            CFlashbang = true,
-            CDecoyGrenade = true,
-            CKnife = true,
-            CWeaponTaser = true
-        }
-        
-        if min_damage_indicator == "Off" or grenade_and_knife_classes[player_weapon_classname] then
-            return
-        end
-        
-        local damage_override_active = ui.get(refs.damage_override[1]) and ui.get(refs.damage_override[2])
-        local damage_string = min_damage_indicator == "Always" and (damage_override_active and ui.get(refs.damage_override[3]) or ui.get(refs.damage[1]))
-                or (min_damage_indicator == "On override" and damage_override_active and ui.get(refs.damage_override[3]) or normalize)
-
-        if damage_string ~= nil then
-            renderer.text(_x / 2 + 5, _y / 2 - 20, 255, 255, 255, 255, "", 0, tostring(damage_string))
-        end
+    csm_removals = function()
+        cvar.mat_postprocess_enable:set_int(lua.funcs.table_contains(ui.get(menu.misc_tab.fps_boosters), "Post processing") and 0 or 1)
+        cvar.mat_vignette_enable:set_int(lua.funcs.table_contains(ui.get(menu.misc_tab.fps_boosters), "Vignette") and 0 or 1)
+        cvar.mat_bloom_scalefactor_scalar:set_int(lua.funcs.table_contains(ui.get(menu.misc_tab.fps_boosters), "Bloom") and 0 or 1)
+        cvar.cl_csm_shadows:set_int(lua.funcs.table_contains(ui.get(menu.misc_tab.fps_boosters), "Shadows") and 0 or 1)
+        cvar.r_dynamic:set_int(lua.funcs.table_contains(ui.get(menu.misc_tab.fps_boosters), "Shadows") and 0 or 1)
+        cvar.r_shadows:set_int(lua.funcs.table_contains(ui.get(menu.misc_tab.fps_boosters), "Shadows") and 0 or 1)
+        cvar.cl_csm_static_prop_shadows:set_int(lua.funcs.table_contains(ui.get(menu.misc_tab.fps_boosters), "Shadows") and 0 or 1)
+        cvar.cl_csm_world_shadows:set_int(lua.funcs.table_contains(ui.get(menu.misc_tab.fps_boosters), "Shadows") and 0 or 1)
+        cvar.cl_foot_contact_shadows:set_int(lua.funcs.table_contains(ui.get(menu.misc_tab.fps_boosters), "Shadows") and 0 or 1)
+        cvar.cl_csm_viewmodel_shadows:set_int(lua.funcs.table_contains(ui.get(menu.misc_tab.fps_boosters), "Shadows") and 0 or 1)
+        cvar.cl_csm_rope_shadows:set_int(lua.funcs.table_contains(ui.get(menu.misc_tab.fps_boosters), "Shadows") and 0 or 1)
+        cvar.cl_csm_sprite_shadows:set_int(lua.funcs.table_contains(ui.get(menu.misc_tab.fps_boosters), "Shadows") and 0 or 1)
+        cvar.cl_csm_world_shadows_in_viewmodelcascade:set_int(lua.funcs.table_contains(ui.get(menu.misc_tab.fps_boosters), "Shadows") and 0 or 1)
+        cvar.violence_ablood:set_int(lua.funcs.table_contains(ui.get(menu.misc_tab.fps_boosters), "Blood") and 0 or 1)
+        cvar.violence_hblood:set_int(lua.funcs.table_contains(ui.get(menu.misc_tab.fps_boosters), "Blood") and 0 or 1)
+        cvar.cl_disable_ragdolls:set_int(lua.funcs.table_contains(ui.get(menu.misc_tab.fps_boosters), "Ragdolls") and 0 or 1)
+        cvar.fog_enable:set_int(lua.funcs.table_contains(ui.get(menu.misc_tab.fps_boosters), "Fog") and 0 or 1)
+        cvar.fog_enable_water_fog:set_int(lua.funcs.table_contains(ui.get(menu.misc_tab.fps_boosters), "Fog") and 0 or 1)
+        cvar.fog_enableskybox:set_int(lua.funcs.table_contains(ui.get(menu.misc_tab.fps_boosters), "Fog") and 0 or 1)
+        cvar.r_3dsky:set_int(lua.funcs.table_contains(ui.get(menu.misc_tab.fps_boosters), "3D skybox") and 0 or 1)
     end,
 
     anim_breakers = function()
@@ -1256,6 +1307,37 @@ visual_functions = {
             if visual_functions.ground_ticks > 25 and visual_functions.ground_ticks < 225 then
                 entity.set_prop(entity.get_local_player(), "m_flPoseParameter", 0.5, 12)
             end
+        end
+    end,
+
+    damage_indicator = function()
+
+        if not entity.get_local_player() or not entity.is_alive(entity.get_local_player()) then return end
+
+        local _x, _y = client.screen_size()
+        local min_damage_indicator = ui.get(menu.misc_tab.minimum_damage_indicator)
+        local player_weapon_classname = entity.get_classname(entity.get_player_weapon(entity.get_local_player()))
+
+        local grenade_and_knife_classes = {
+            CHEGrenade = true,
+            CSmokeGrenade = true,
+            CMolotovGrenade = true,
+            CFlashbang = true,
+            CDecoyGrenade = true,
+            CKnife = true,
+            CWeaponTaser = true
+        }
+        
+        if min_damage_indicator == "Off" or grenade_and_knife_classes[player_weapon_classname] then
+            return
+        end
+        
+        local damage_override_active = ui.get(refs.damage_override[1]) and ui.get(refs.damage_override[2])
+        local damage_string = min_damage_indicator == "Always" and (damage_override_active and ui.get(refs.damage_override[3]) or ui.get(refs.damage[1]))
+                or (min_damage_indicator == "On override" and damage_override_active and ui.get(refs.damage_override[3]) or normalize)
+
+        if damage_string ~= nil then
+            renderer.text(_x / 2 + 5, _y / 2 - 20, 255, 255, 255, 255, "", 0, tostring(damage_string))
         end
     end,
 
@@ -1415,6 +1497,7 @@ client.set_event_callback("paint_ui", function()
     ui.set_visible(tab_selection, true)
     ui.set_visible(antiaim_tabs, ui.get(tab_selection) == "Anti-aim")
     is_antiaim_tab = ui.get(tab_selection) == "Anti-aim" and ui.get(antiaim_tabs) == "Keybinds"
+    is_antiaim_helpers_tab = ui.get(tab_selection) == "Anti-aim" and ui.get(antiaim_tabs) == "Helpers"
     is_antiaim_builder_tab = ui.get(tab_selection) == "Anti-aim" and ui.get(antiaim_tabs) == "Builder"
     is_misc_tab = ui.get(tab_selection) == "Misc"
     is_config_tab = ui.get(tab_selection) == "Config"
@@ -1461,17 +1544,26 @@ client.set_event_callback("paint_ui", function()
     end
 
     for i, feature in pairs(menu.antiaim_tab) do
-
-        ui.set_visible(menu.antiaim_tab.random_antiaim_conditions, is_antiaim_tab and lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Random anti-aim"))
-        ui.set_visible(menu.antiaim_tab.safe_head_states, is_antiaim_tab and lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Safe head"))
-        ui.set_visible(menu.antiaim_tab.static_on_height_states, is_antiaim_tab and lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Static on height advantage"))
-        ui.set_visible(menu.antiaim_tab.secondary_swap_conditions, is_antiaim_tab and lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Secondary swap on target"))
-        ui.set_visible(menu.antiaim_tab.secondary_swap_weapon, is_antiaim_tab and lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Secondary swap on target"))
-        ui.set_visible(menu.antiaim_tab.secondary_swap_distance, is_antiaim_tab and lua.funcs.table_contains(ui.get(menu.antiaim_tab.safety_options), "Secondary swap on target"))
         ui.set_visible(menu.antiaim_tab.onuse_antiaim_side, is_antiaim_tab and ui.get(menu.antiaim_tab.onuse_antiaim_mode) == "Static")
+        ui.set_visible(menu.antiaim_tab.freestand_disablers, is_antiaim_tab)
 
         if type(feature) ~= "table" and feature ~= 45 then
             ui.set_visible(feature, is_antiaim_tab)
+        end
+	end 
+
+    for i, feature in pairs(menu.antiaim_helpers_tab) do
+
+        ui.set_visible(menu.antiaim_helpers_tab.random_antiaim_conditions, is_antiaim_helpers_tab and lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Random anti-aim"))
+        ui.set_visible(menu.antiaim_helpers_tab.safe_head_states, is_antiaim_helpers_tab and lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Safe head"))
+        ui.set_visible(menu.antiaim_helpers_tab.static_on_height_states, is_antiaim_helpers_tab and lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Static on height advantage"))
+        ui.set_visible(menu.antiaim_helpers_tab.secondary_swap_conditions, is_antiaim_helpers_tab and lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Secondary swap on target"))
+        ui.set_visible(menu.antiaim_helpers_tab.secondary_swap_weapon, is_antiaim_helpers_tab and lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Secondary swap on target"))
+        ui.set_visible(menu.antiaim_helpers_tab.secondary_swap_distance, is_antiaim_helpers_tab and lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Secondary swap on target"))
+        ui.set_visible(menu.antiaim_helpers_tab.fast_ladder_options, is_antiaim_helpers_tab and ui.get(menu.antiaim_helpers_tab.fast_ladder))
+
+        if type(feature) ~= "table" then
+            ui.set_visible(feature, is_antiaim_helpers_tab)
         end
 	end 
 
@@ -1494,9 +1586,9 @@ end)
 
 client.set_event_callback("setup_command", function(cmd)
 
-    client.exec("sv_maxunlag 0.175")
-    client.exec("fps_max 0")
-    client.exec("fps_max_menu 0")
+    cvar.sv_maxunlag:set_float(0.175)
+    cvar.fps_max:set_int(0)
+    cvar.fps_max_menu:set_int(0)
 
     ui.set(refs.delay_shot, ui.get(antiaim_functions.delay_shot))
 
@@ -1539,12 +1631,13 @@ client.set_event_callback("paint_ui", function()
 end)
 
 client.set_event_callback("paint", function()
+    visual_functions.csm_removals()
     visual_functions.damage_indicator()
 end)
 
 client.set_event_callback("shutdown", function()
     ui.set(refs.fakelag_limit, 15)
-    client.exec("sv_maxunlag 0.2")
+    cvar.sv_maxunlag:set_float(0.2)
     lua.funcs.reset_antiaim_tab(true)
     lua.funcs.default_antiaim_tab()
 end)
