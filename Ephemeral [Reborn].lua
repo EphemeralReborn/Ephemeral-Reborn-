@@ -537,8 +537,12 @@ desync_functions = {
 
         local client_weapon = entity.get_player_weapon(entity.get_local_player())
 
-        if not client_weapon or entity.get_prop(entity.get_local_player(), 'm_MoveType') == 9 then
+        if not client_weapon then
             return false
+        end
+
+        if entity.get_prop(entity.get_local_player(), 'm_MoveType') == 9 then
+            return
         end
         
         if cmd.in_attack == 1 or cmd.in_attack2 == 1 then
