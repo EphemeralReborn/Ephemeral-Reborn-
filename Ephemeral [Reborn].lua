@@ -1250,6 +1250,10 @@ visual_functions = {
     legs_cached = false,
     ground_ticks = 0,
 
+    update_lua_color = function()
+        lua_color = {ui.get(menu_color_ref)}
+    end,    
+
     csm_removals = function()
         cvar.mat_postprocess_enable:set_int(lua.funcs.table_contains(ui.get(menu.misc_tab.fps_boosters), "Post processing") and 0 or 1)
         cvar.mat_vignette_enable:set_int(lua.funcs.table_contains(ui.get(menu.misc_tab.fps_boosters), "Vignette") and 0 or 1)
@@ -1627,6 +1631,7 @@ client.set_event_callback("pre_render", function()
 end)
 
 client.set_event_callback("paint_ui", function()
+    visual_functions.update_lua_color()
     visual_functions.render_watermark()
 end)
 
