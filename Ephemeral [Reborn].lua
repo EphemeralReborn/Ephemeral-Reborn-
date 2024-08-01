@@ -231,6 +231,7 @@ local menu = {
     antiaim_helpers_tab = {
         safety_options = ui.new_multiselect(tab, container_aa, "Safety options", "Random anti-aim", "Safe knife", "Safe head", "Static on height advantage", "Avoid backstab", "Secondary swap on target"),
         random_antiaim_conditions = ui.new_multiselect(tab, container_aa, "Random anti-aim conditions", "Warmup", "Freeze time", "Round end"),
+        random_antiaim_mode = ui.new_combobox(tab, container_aa, "Random anti-aim mode", "Slow spin", "Fast spin", "Wide jitter", "Random"),
         safe_head_states = ui.new_multiselect(tab, container_aa, "Safe head states", "Standing", "Moving", "Slowwalking", "Crouching", "Air", "Air-Crouching", "Crouch-Moving", "On Zeus"),
         static_on_height_states = ui.new_multiselect(tab, container_aa, "Static on height advantage states", "Standing", "Moving", "Slowwalking", "Crouching", "Air", "Air-Crouching", "Crouch-Moving"),
         secondary_swap_conditions = ui.new_multiselect(tab, container_aa, "Secondary swap conditions", "Target has knife", "Target has zeus"),
@@ -806,8 +807,9 @@ antiaim_functions = {
     avoid_backstab_bool = false,
     safe_knife = false,
     safe_head = false,
-    manual_antiaim_bool = false,
+    random_antiam = false,
     round_end = false,
+    manual_antiaim_bool = false,
     manual_antiaim_tbl = {
         last_forward,
         last_left,
@@ -859,7 +861,7 @@ antiaim_functions = {
 
         if not entity.get_local_player() or not entity.is_alive(entity.get_local_player()) then return end
 
-        if antiaim_functions.onuse_antiaim or defensive_functions.active or antiaim_functions.safe_head or antiaim_functions.safe_knife then return end
+        if antiaim_functions.onuse_antiaim or defensive_functions.active or antiaim_functions.safe_head or antiaim_functions.safe_knife or antiaim_functions.random_antiam then return end
 
         if cmd.in_use == 1 then return end
 
@@ -998,50 +1000,55 @@ antiaim_functions = {
 
     safety_options = {
 
-        random_aa_on_warmup = function(cmd)
+        random_antiaim_setup = function(cmd)
 
-            if antiaim_functions.onuse_antiaim or entity.get_prop(entity.get_all("CCSGameRulesProxy")[1],"m_bWarmupPeriod") == 0 then return end
+            antiaim_functions.random_antiam = false
+
+            local modes = {
+                ["Slow spin"] = { pitch = "Off", pitch_int = 0, yaw_value = (-math.fmod(globals.curtime() * 360, 360) + 180), yaw_jitter = 0 },
+                ["Fast spin"] = { pitch = "Off", pitch_int = 0, yaw_value = (-math.fmod(globals.curtime() * 980, 360) + 180), yaw_jitter = 0 },
+                ["Wide jitter"] = { pitch = "Down", pitch_int = 89, yaw_value = (globals.tickcount() % 3 == 0 and -52 or 61), yaw_jitter = 45 },
+                ["Random"] = { pitch = "Random", pitch_int = client.random_int(-89, 89), yaw_value = client.random_int(-180, 180), yaw_jitter = 180 }
+            }
     
-            if lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Random anti-aim") and lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.random_antiaim_conditions), "Warmup") then
-                ui.set(refs.pitch[1], "Random")
+            local mode = ui.get(menu.antiaim_helpers_tab.random_antiaim_mode)
+            local mode_settings = modes[mode]
+    
+            local apply_antiaim = function()
+                ui.set(refs.pitch[1], mode_settings.pitch)
                 ui.set(refs.yaw_base, "At targets")
                 ui.set(refs.yaw[1], "180")
-                ui.set(refs.yaw[2], -math.fmod(globals.curtime() * 960, 360) + 180)
+                ui.set(refs.yaw[2], mode_settings.yaw_value)
                 ui.set(refs.yawjitter[1], "Random")
-                ui.set(refs.yawjitter[2], 60)
+                ui.set(refs.yawjitter[2], mode_settings.yaw_jitter)
                 ui.set(refs.bodyyaw[2], 0)
                 desync_functions._run(cmd, 48, 180, 89)
+                antiaim_functions.random_antiam = true
             end
-        end,
-
-        random_aa_on_freeze = function(cmd)
-
-            if antiaim_functions.onuse_antiaim or entity.get_prop(entity.get_all("CCSGameRulesProxy")[1],"m_bFreezePeriod") == 0 then return end
     
-            if lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Random anti-aim") and lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.random_antiaim_conditions), "Freeze time") then
-                cmd.pitch = client.random_int(-89, 89)
-                cmd.yaw = cmd.yaw + (-math.fmod(globals.curtime() * 960, 360) + 180)
-                desync_functions._run(cmd, 48, 180, 89)
-            end
-        end,
-
-        random_aa_on_round_end = function(cmd)
-
-            if antiaim_functions.onuse_antiaim or not antiaim_functions.round_end then return end
+            local conditions = {
+                Warmup = function() return entity.get_prop(entity.get_all("CCSGameRulesProxy")[1], "m_bWarmupPeriod") ~= 0 end,
+                ["Freeze time"] = function() return entity.get_prop(entity.get_all("CCSGameRulesProxy")[1], "m_bFreezePeriod") ~= 0 end,
+                ["Round end"] = function() return antiaim_functions.round_end end
+            }
     
-            if lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Random anti-aim") and lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.random_antiaim_conditions), "Round end") then
-                ui.set(refs.pitch[1], "Random")
-                ui.set(refs.yaw_base, "At targets")
-                ui.set(refs.yaw[1], "180")
-                ui.set(refs.yaw[2], -math.fmod(globals.curtime() * 960, 360) + 180)
-                ui.set(refs.yawjitter[1], "Random")
-                ui.set(refs.yawjitter[2], 60)
-                ui.set(refs.bodyyaw[2], 0)
-                desync_functions._run(cmd, 48, 180, 89)
+            for condition, check in pairs(conditions) do
+                if lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Random anti-aim") and
+                   lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.random_antiaim_conditions), condition) and
+                   check() then
+                    apply_antiaim()
+                    if condition == "Freeze time" then
+                        cmd.pitch = cmd.pitch + mode_settings.pitch_int
+                        cmd.yaw = cmd.yaw + mode_settings.yaw_value
+                    end
+                    return
+                end
             end
         end,
 
         safe_knife = function(cmd)
+
+            antiaim_functions.safe_knife = false
 
             if antiaim_functions.onuse_antiaim or antiaim_functions.avoid_backstab_bool then return end
     
@@ -1056,11 +1063,11 @@ antiaim_functions = {
                 desync_functions._run(cmd, 48, 180, 89)
                 antiaim_functions.safe_knife = true
             end
-
-            antiaim_functions.safe_knife = false
         end,
 
         safe_head = function(cmd)
+
+            antiaim_functions.safe_head = false
 
             if antiaim_functions.onuse_antiaim or antiaim_functions.avoid_backstab_bool then return end
 
@@ -1069,21 +1076,7 @@ antiaim_functions = {
             local doubletap_active = ui.get(refs.doubletap[1]) and ui.get(refs.doubletap[2])
             local onshot_active = ui.get(refs.onshot[1]) and ui.get(refs.onshot[2])
 
-            if lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safe_head_states), lua.vars.int_to_string[lua.vars.player_state]) then
-                if not doubletap_active and not onshot_active then
-                    ui.set(refs.pitch[1], "Minimal")
-                    ui.set(refs.yaw_base, "At targets")
-                    ui.set(refs.yaw[1], "180")
-                    ui.set(refs.yaw[2], 0)
-                    ui.set(refs.yawjitter[1], "Off")
-                    ui.set(refs.yawjitter[2], 0)
-                    ui.set(refs.bodyyaw[2], 0)
-                    desync_functions._run(cmd, math.sin(globals.realtime() * 8) * -58 + 15, 180, 89)
-                    antiaim_functions.safe_head = true
-                end
-            end
-
-            if lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safe_head_states), "On Zeus") and entity.get_classname(entity.get_player_weapon(entity.get_local_player())) == "CWeaponTaser" then
+            local safe_head_antiaim = function(desync)
                 ui.set(refs.pitch[1], "Minimal")
                 ui.set(refs.yaw_base, "At targets")
                 ui.set(refs.yaw[1], "180")
@@ -1091,100 +1084,99 @@ antiaim_functions = {
                 ui.set(refs.yawjitter[1], "Off")
                 ui.set(refs.yawjitter[2], 0)
                 ui.set(refs.bodyyaw[2], 0)
-                desync_functions._run(cmd, math.sin(globals.realtime() * 64) * -35 + 10, 180, 89)
+                desync_functions._run(cmd, desync, 180, 89)
                 antiaim_functions.safe_head = true
             end
 
-            antiaim_functions.safe_head = false
-        end,
-
-        static_on_height_advantage = function(cmd)
-
-
-            if antiaim_functions.onuse_antiaim or antiaim_functions.avoid_backstab_bool or not client.current_threat() then return end
-
-            local lp_origin = vector(entity.get_origin(entity.get_local_player()))
-            local target_origin = vector(entity.get_origin(client.current_threat()))
-
-            if lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Static on height advantage") and lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.static_on_height_states), lua.vars.int_to_string[lua.vars.player_state]) then
-                if lp_origin.z > target_origin.z + 115 then
-                    ui.set(refs.pitch[1], "Minimal")
-                    ui.set(refs.yaw_base, "At targets")
-                    ui.set(refs.yaw[1], "180")
-                    ui.set(refs.yaw[2], 0)
-                    ui.set(refs.yawjitter[1], "Off")
-                    ui.set(refs.yawjitter[2], 0)
-                    ui.set(refs.bodyyaw[2], 0)
+            if lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safe_head_states), lua.vars.int_to_string[lua.vars.player_state]) then
+                if not doubletap_active and not onshot_active then
+                    safe_head_antiaim(math.sin(globals.realtime() * 8) * -58 + 15)
                 end
+            end
+
+            if lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safe_head_states), "On Zeus") and entity.get_classname(entity.get_player_weapon(entity.get_local_player())) == "CWeaponTaser" then
+                safe_head_antiaim(math.sin(globals.realtime() * 64) * -35 + 10)
             end
         end,
 
+        static_on_height_advantage = function(cmd)
+            if antiaim_functions.onuse_antiaim or antiaim_functions.avoid_backstab_bool or not client.current_threat() then return end
+    
+            local lp_origin = vector(entity.get_origin(entity.get_local_player()))
+            local target_origin = vector(entity.get_origin(client.current_threat()))
+    
+            if lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Static on height advantage") and 
+               lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.static_on_height_states), lua.vars.int_to_string[lua.vars.player_state]) and 
+               lp_origin.z > target_origin.z + 115 then
+                ui.set(refs.pitch[1], "Minimal")
+                ui.set(refs.yaw_base, "At targets")
+                ui.set(refs.yaw[1], "180")
+                ui.set(refs.yaw[2], 0)
+                ui.set(refs.yawjitter[1], "Off")
+                ui.set(refs.yawjitter[2], 0)
+                ui.set(refs.bodyyaw[2], 0)
+            end
+        end,
+    
         avoid_backstab = function()
 
-            if not entity.get_local_player() or not entity.is_alive(entity.get_local_player()) then return end
-    
-            if antiaim_functions.onuse_antiaim then return end
+            antiaim_functions.avoid_backstab_bool = false
+
+            if not entity.get_local_player() or not entity.is_alive(entity.get_local_player()) or antiaim_functions.onuse_antiaim then return end
     
             if lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Avoid backstab") then
-                local players = entity.get_players(true)
-                for _, player in ipairs(players) do
-                    local distance = vector(entity.get_origin(entity.get_local_player())):dist(vector(entity.get_origin(player)))
+                local local_origin = vector(entity.get_origin(entity.get_local_player()))
+                for _, player in ipairs(entity.get_players(true)) do
+                    local distance = local_origin:dist(vector(entity.get_origin(player)))
                     if entity.get_classname(entity.get_player_weapon(player)) == "CKnife" and distance <= 300 then
                         ui.set(refs.yaw[2], 180)
                         ui.set(refs.pitch[1], "Off")
                         antiaim_functions.avoid_backstab_bool = true
+                        return
                     end
                 end
             end
         end,
 
         secondary_swap = function()
-            local local_player = entity.get_local_player()
-            if not local_player or not entity.is_alive(local_player) then return end
-            if antiaim_functions.onuse_antiaim then return end
-            if not lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Secondary swap on target") then return end
-        
-            local secondary_swap_distance = ui.get(menu.antiaim_helpers_tab.secondary_swap_distance)
-            local secondary_swap_weapon = ui.get(menu.antiaim_helpers_tab.secondary_swap_weapon)
-            local swap_conditions = ui.get(menu.antiaim_helpers_tab.secondary_swap_conditions)
-        
-            local function has_weapon(player, weapon_class)
-                return entity.get_classname(entity.get_player_weapon(player)) == weapon_class
-            end
-        
-            local function swap_weapon(weapon, has_taser)
-                if weapon == "Pull zeus (Pistol backup)" and entity.get_classname(entity.get_player_weapon(entity.get_local_player())) ~= "CWeaponTaser" then
-                    client.exec(has_taser and "slot3" or "slot2")
-                elseif weapon == "Pull pistol" then
-                    client.exec("slot2")
+            if not entity.get_local_player() or not entity.is_alive(entity.get_local_player()) or antiaim_functions.onuse_antiaim then return end
+    
+            if lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Secondary swap on target") then
+                local secondary_swap_distance = ui.get(menu.antiaim_helpers_tab.secondary_swap_distance)
+                local secondary_swap_weapon = ui.get(menu.antiaim_helpers_tab.secondary_swap_weapon)
+                local swap_conditions = ui.get(menu.antiaim_helpers_tab.secondary_swap_conditions)
+    
+                local local_origin = vector(entity.get_origin(entity.get_local_player()))
+    
+                local function has_weapon(weapon_class)
+                    for _, player in ipairs(entity.get_players(true)) do
+                        local distance = local_origin:dist(vector(entity.get_origin(player)))
+                        if entity.get_classname(entity.get_player_weapon(player)) == weapon_class and distance <= secondary_swap_distance then
+                            return true
+                        end
+                    end
+                    return false
                 end
-                ui.set(refs.yaw[2], 180)
-                ui.set(refs.pitch[1], "Off")
-            end
-        
-            local function check_players_for_weapon(weapon_class)
-                local players = entity.get_players(true)
-                for _, player in ipairs(players) do
-                    local distance = vector(entity.get_origin(local_player)):dist(vector(entity.get_origin(player)))
-                    if has_weapon(player, weapon_class) and distance <= secondary_swap_distance then
-                        return true
+    
+
+                local has_taser = false
+                for _, weapon in pairs(lua.funcs.get_player_weapons(entity.get_local_player())) do
+                    if entity.get_classname(weapon) == "CWeaponTaser" then
+                        has_taser = true
+                        break
                     end
                 end
-                return false
-            end
-        
-            local has_taser = false
-            for _, weapon in pairs(lua.funcs.get_player_weapons(local_player)) do
-                if entity.get_classname(weapon) == "CWeaponTaser" then
-                    has_taser = true
-                    break
+    
+                if (lua.funcs.table_contains(swap_conditions, "Target has knife") and has_weapon("CKnife")) or 
+                   (lua.funcs.table_contains(swap_conditions, "Target has zeus") and has_weapon("CWeaponTaser")) then
+                    if secondary_swap_weapon == "Pull zeus (Pistol backup)" and entity.get_classname(entity.get_player_weapon(entity.get_local_player())) ~= "CWeaponTaser" then
+                        client.exec(has_taser and "slot3" or "slot2")
+                    elseif secondary_swap_weapon == "Pull pistol" then
+                        client.exec("slot2")
+                    end
+                    ui.set(refs.yaw[2], 180)
+                    ui.set(refs.pitch[1], "Off")
                 end
-            end
-        
-            if lua.funcs.table_contains(swap_conditions, "Target has knife") and check_players_for_weapon("CKnife") then
-                swap_weapon(secondary_swap_weapon, has_taser)
-            elseif lua.funcs.table_contains(swap_conditions, "Target has zeus") and check_players_for_weapon("CWeaponTaser") then
-                swap_weapon(secondary_swap_weapon, has_taser)
             end
         end,
     },
@@ -1341,7 +1333,7 @@ visual_functions = {
     end,    
 
     csm_removals = function()
-        cvar.mat_postprocess_enable:set_int(lua.funcs.table_contains(ui.get(menu.misc_tab.fps_boosters), "Post processing") and 0 or 1)
+        cvar.mat_postprocess_enable:set_raw_int(lua.funcs.table_contains(ui.get(menu.misc_tab.fps_boosters), "Post processing") and 0 or 1)
         cvar.mat_vignette_enable:set_int(lua.funcs.table_contains(ui.get(menu.misc_tab.fps_boosters), "Vignette") and 0 or 1)
         cvar.mat_bloom_scalefactor_scalar:set_int(lua.funcs.table_contains(ui.get(menu.misc_tab.fps_boosters), "Bloom") and 0 or 1)
         cvar.cl_csm_shadows:set_int(lua.funcs.table_contains(ui.get(menu.misc_tab.fps_boosters), "Shadows") and 0 or 1)
@@ -1443,7 +1435,7 @@ visual_functions = {
             _y = height / 2 - 125
         else
             _x = width / 2
-            _y = height - 26
+            _y = height - 15
         end
 
 
@@ -1645,6 +1637,7 @@ client.set_event_callback("paint_ui", function()
     for i, feature in pairs(menu.antiaim_helpers_tab) do
 
         ui.set_visible(menu.antiaim_helpers_tab.random_antiaim_conditions, is_antiaim_helpers_tab and lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Random anti-aim"))
+        ui.set_visible(menu.antiaim_helpers_tab.random_antiaim_mode, is_antiaim_helpers_tab and lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Random anti-aim"))
         ui.set_visible(menu.antiaim_helpers_tab.safe_head_states, is_antiaim_helpers_tab and lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Safe head"))
         ui.set_visible(menu.antiaim_helpers_tab.static_on_height_states, is_antiaim_helpers_tab and lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Static on height advantage"))
         ui.set_visible(menu.antiaim_helpers_tab.secondary_swap_conditions, is_antiaim_helpers_tab and lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Secondary swap on target"))
@@ -1681,9 +1674,7 @@ client.set_event_callback("setup_command", function(cmd)
     antiaim_functions.antiaim_state(cmd)
     antiaim_functions.antiaim_handle(cmd)
     antiaim_functions.fast_ladder(cmd)
-    antiaim_functions.safety_options.random_aa_on_warmup(cmd)
-    antiaim_functions.safety_options.random_aa_on_freeze(cmd)
-    antiaim_functions.safety_options.random_aa_on_round_end(cmd)
+    antiaim_functions.safety_options.random_antiaim_setup(cmd)
     antiaim_functions.safety_options.safe_knife(cmd)
     antiaim_functions.safety_options.safe_head(cmd)
     antiaim_functions.safety_options.static_on_height_advantage(cmd)
