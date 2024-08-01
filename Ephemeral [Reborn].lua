@@ -1684,10 +1684,6 @@ end)
 
 client.set_event_callback("setup_command", function(cmd)
 
-    cvar.sv_maxunlag:set_float(0.175)
-    cvar.fps_max:set_int(0)
-    cvar.fps_max_menu:set_int(0)
-
     ui.set(refs.delay_shot, ui.get(antiaim_functions.delay_shot))
 
     antiaim_functions.antiaim_state(cmd)
@@ -1736,7 +1732,9 @@ end)
 
 client.set_event_callback("shutdown", function()
     ui.set(refs.fakelag_limit, 15)
-    cvar.sv_maxunlag:set_float(0.2)
     lua.funcs.reset_antiaim_tab(true)
     lua.funcs.default_antiaim_tab()
 end)
+
+cvar.fps_max:set_int(0)
+cvar.fps_max_menu:set_int(0)
