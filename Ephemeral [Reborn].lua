@@ -354,16 +354,28 @@ config_system = {
                 end
             end
         end
-
+    
         for tab_name, tab_settings in pairs(menu) do
             if tab_name ~= "configuration_tab" then
                 config_tbl.antiaim_tab[tab_name] = {}
                 for setting_name, setting in pairs(tab_settings) do
-                    config_tbl.antiaim_tab[tab_name][setting_name] = ui.get(setting)
+                    if setting == menu.antiaim_tab.edge_yaw or
+                       setting == menu.antiaim_tab.manual_antiaim_forward or
+                       setting == menu.antiaim_tab.manual_antiaim_left or
+                       setting == menu.antiaim_tab.manual_antiaim_right then
+                        local values = {ui.get(setting)}
+                        config_tbl.antiaim_tab[tab_name][setting_name] = {
+                            value1 = values[1],
+                            value2 = values[2],
+                            value3 = values[3]
+                        }
+                    else
+                        config_tbl.antiaim_tab[tab_name][setting_name] = ui.get(setting)
+                    end
                 end
             end
         end
-
+    
         local cfg = config_system.get_config(name)
     
         if not cfg then
@@ -373,7 +385,7 @@ config_system = {
         end
     
         database.write(lua.database.configs, db)
-    end,        
+    end,      
     delete_config = function(name)
         local db = database.read(lua.database.configs) or {}
 
@@ -427,11 +439,26 @@ config_system = {
                 end
             end
         end
-        
+    
         for tab_name, tab_settings in pairs(config.antiaim_tab or {}) do
             for setting_name, setting_value in pairs(tab_settings) do
                 if setting_value ~= nil then
-                    ui.set(menu[tab_name][setting_name], setting_value)
+                    if setting_name == "edge_yaw" or
+                        setting_name == "manual_antiaim_forward" or
+                        setting_name == "manual_antiaim_left" or
+                        setting_name == "manual_antiaim_right" then
+
+                        local idx_to_mode = {
+                            [0] = "Always on",
+                            [1] = "On hotkey",
+                            [2] = "Toggle",
+                            [3] = "Off hotkey",
+                        }
+
+                        ui.set(menu[tab_name][setting_name], tostring(idx_to_mode[tonumber(setting_value.value2)]), tonumber(setting_value.value3))
+                    else
+                        ui.set(menu[tab_name][setting_name], setting_value)
+                    end
                 end
             end
         end
@@ -454,11 +481,26 @@ config_system = {
                 end
             end
         end
-        
+    
         for tab_name, tab_settings in pairs(config.antiaim_tab or {}) do
             for setting_name, setting_value in pairs(tab_settings) do
                 if setting_value ~= nil then
-                    ui.set(menu[tab_name][setting_name], setting_value)
+                    if setting_name == "edge_yaw" or
+                        setting_name == "manual_antiaim_forward" or
+                        setting_name == "manual_antiaim_left" or
+                        setting_name == "manual_antiaim_right" then
+
+                        local idx_to_mode = {
+                            [0] = "Always on",
+                            [1] = "On hotkey",
+                            [2] = "Toggle",
+                            [3] = "Off hotkey",
+                        }
+
+                        ui.set(menu[tab_name][setting_name], tostring(idx_to_mode[tonumber(setting_value.value2)]), tonumber(setting_value.value3))
+                    else
+                        ui.set(menu[tab_name][setting_name], setting_value)
+                    end
                 end
             end
         end
@@ -469,7 +511,7 @@ config_system = {
             antiaim_helpers_tab = {},
             antiaim_tab = {}
         }
-
+        
         for key, value in pairs(lua.vars.player_states_abrev) do
             config.antiaim[value] = {}
             for k, v in pairs(antiaim_builder_tbl[key]) do
@@ -485,12 +527,24 @@ config_system = {
                 end
             end
         end
-
+    
         for tab_name, tab_settings in pairs(menu) do
             if tab_name ~= "configuration_tab" then
                 config.antiaim_tab[tab_name] = {}
                 for setting_name, setting in pairs(tab_settings) do
-                    config.antiaim_tab[tab_name][setting_name] = ui.get(setting)
+                    if setting == menu.antiaim_tab.edge_yaw or
+                       setting == menu.antiaim_tab.manual_antiaim_forward or
+                       setting == menu.antiaim_tab.manual_antiaim_left or
+                       setting == menu.antiaim_tab.manual_antiaim_right then
+                        local values = {ui.get(setting)}
+                        config.antiaim_tab[tab_name][setting_name] = {
+                            value1 = values[1],
+                            value2 = values[2],
+                            value3 = values[3]
+                        }
+                    else
+                        config.antiaim_tab[tab_name][setting_name] = ui.get(setting)
+                    end
                 end
             end
         end
