@@ -1077,6 +1077,8 @@ antiaim_functions = {
                     desync_functions._run(cmd, math.sin(globals.realtime() * 8) * -58 + 15, 180, 89)
                     antiaim_functions.safe_head = true
                 end
+
+                antiaim_functions.safe_head = false
             end
         end,
 
@@ -1096,6 +1098,8 @@ antiaim_functions = {
                 desync_functions._run(cmd, math.sin(globals.realtime() * 64) * -35 + 10, 180, 89)
                 antiaim_functions.safe_head = true
             end
+            
+            antiaim_functions.safe_head = false
         end,
 
         static_on_height_advantage = function(cmd)
