@@ -702,6 +702,7 @@ defensive_functions = {
     defensive_check = function()
         local local_player = entity.get_local_player()
         if not local_player then return end
+        if antiaim_functions.safe_head or antiaim_functions.safe_knife then return end
 
         local antiaim_selection = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_antiaim_selection)
         if not (lua.funcs.table_contains(antiaim_selection, "Pitch") or lua.funcs.table_contains(antiaim_selection, "Yaw")) then
@@ -771,7 +772,7 @@ defensive_functions = {
     _run = function()
         local local_player = entity.get_local_player()
         if not local_player then return end
-        if antiaim_functions.safe_knife then return end
+        if antiaim_functions.safe_head or antiaim_functions.safe_knife then return end
 
         local antiaim_selection = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_antiaim_selection)
         if not (lua.funcs.table_contains(antiaim_selection, "Pitch") or lua.funcs.table_contains(antiaim_selection, "Yaw")) then
@@ -804,6 +805,7 @@ antiaim_functions = {
     onuse_antiaim = false,
     avoid_backstab_bool = false,
     safe_knife = false,
+    safe_head = false,
     manual_antiaim_bool = false,
     round_end = false,
     manual_antiaim_tbl = {
@@ -857,7 +859,7 @@ antiaim_functions = {
 
         if not entity.get_local_player() or not entity.is_alive(entity.get_local_player()) then return end
 
-        if antiaim_functions.onuse_antiaim or defensive_functions.active then return end
+        if antiaim_functions.onuse_antiaim or defensive_functions.active or antiaim_functions.safe_head or antiaim_functions.safe_knife then return end
 
         if cmd.in_use == 1 then return end
 
@@ -1073,6 +1075,7 @@ antiaim_functions = {
                     ui.set(refs.yawjitter[2], 0)
                     ui.set(refs.bodyyaw[2], 0)
                     desync_functions._run(cmd, math.sin(globals.realtime() * 8) * -58 + 15, 180, 89)
+                    antiaim_functions.safe_head = true
                 end
             end
         end,
@@ -1091,6 +1094,7 @@ antiaim_functions = {
                 ui.set(refs.yawjitter[2], 0)
                 ui.set(refs.bodyyaw[2], 0)
                 desync_functions._run(cmd, math.sin(globals.realtime() * 64) * -35 + 10, 180, 89)
+                antiaim_functions.safe_head = true
             end
         end,
 
