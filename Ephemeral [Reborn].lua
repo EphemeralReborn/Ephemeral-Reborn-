@@ -442,23 +442,28 @@ config_system = {
     
         for tab_name, tab_settings in pairs(config.antiaim_tab or {}) do
             for setting_name, setting_value in pairs(tab_settings) do
-                if setting_value ~= nil then
+                if setting_value ~= nil and type(setting_value) == "table" then
                     if setting_name == "edge_yaw" or
                         setting_name == "manual_antiaim_forward" or
                         setting_name == "manual_antiaim_left" or
                         setting_name == "manual_antiaim_right" then
-
+                        
                         local idx_to_mode = {
                             [0] = "Always on",
                             [1] = "On hotkey",
                             [2] = "Toggle",
                             [3] = "Off hotkey",
                         }
-
-                        ui.set(menu[tab_name][setting_name], tostring(idx_to_mode[tonumber(setting_value.value2)]), tonumber(setting_value.value3))
+        
+                        local mode = idx_to_mode[tonumber(setting_value.value2)]
+                        if mode then
+                            ui.set(menu[tab_name][setting_name], mode, tonumber(setting_value.value3))
+                        end
                     else
                         ui.set(menu[tab_name][setting_name], setting_value)
                     end
+                elseif setting_value ~= nil then
+                    ui.set(menu[tab_name][setting_name], setting_value)
                 end
             end
         end
@@ -484,23 +489,28 @@ config_system = {
     
         for tab_name, tab_settings in pairs(config.antiaim_tab or {}) do
             for setting_name, setting_value in pairs(tab_settings) do
-                if setting_value ~= nil then
+                if setting_value ~= nil and type(setting_value) == "table" then
                     if setting_name == "edge_yaw" or
                         setting_name == "manual_antiaim_forward" or
                         setting_name == "manual_antiaim_left" or
                         setting_name == "manual_antiaim_right" then
-
+                        
                         local idx_to_mode = {
                             [0] = "Always on",
                             [1] = "On hotkey",
                             [2] = "Toggle",
                             [3] = "Off hotkey",
                         }
-
-                        ui.set(menu[tab_name][setting_name], tostring(idx_to_mode[tonumber(setting_value.value2)]), tonumber(setting_value.value3))
+        
+                        local mode = idx_to_mode[tonumber(setting_value.value2)]
+                        if mode then
+                            ui.set(menu[tab_name][setting_name], mode, tonumber(setting_value.value3))
+                        end
                     else
                         ui.set(menu[tab_name][setting_name], setting_value)
                     end
+                elseif setting_value ~= nil then
+                    ui.set(menu[tab_name][setting_name], setting_value)
                 end
             end
         end
