@@ -334,11 +334,16 @@ config_system = {
             antiaim_helpers_tab = {},
             antiaim_tab = {}
         }
-    
-        if name:match("[^%w]") then
-            return
-        end
-    
+
+        local hotkey_names_tbl = {
+            onuse_antiaim_hotkey = true,
+            freestand_hotkey = true,
+            edge_yaw = true,
+            manual_antiaim_forward = true,
+            manual_antiaim_left = true,
+            manual_antiaim_right = true,
+        }
+        
         for key, value in pairs(lua.vars.player_states_abrev) do
             config_tbl.antiaim[value] = {}
             for k, v in pairs(antiaim_builder_tbl[key]) do
@@ -359,10 +364,7 @@ config_system = {
             if tab_name ~= "configuration_tab" then
                 config_tbl.antiaim_tab[tab_name] = {}
                 for setting_name, setting in pairs(tab_settings) do
-                    if setting == menu.antiaim_tab.edge_yaw or
-                       setting == menu.antiaim_tab.manual_antiaim_forward or
-                       setting == menu.antiaim_tab.manual_antiaim_left or
-                       setting == menu.antiaim_tab.manual_antiaim_right then
+                    if hotkey_names_tbl[setting_name] then
                         local values = {ui.get(setting)}
                         config_tbl.antiaim_tab[tab_name][setting_name] = {
                             value1 = values[1],
@@ -424,6 +426,15 @@ config_system = {
     end,
     load_settings = function(config)
 
+        local hotkey_names_tbl = {
+            onuse_antiaim_hotkey = true,
+            freestanding_hotkey = true,
+            edge_yaw = true,
+            manual_antiaim_forward = true,
+            manual_antiaim_left = true,
+            manual_antiaim_right = true
+        }
+
         for key, value in pairs(lua.vars.player_states_abrev) do
             for k, v in pairs(antiaim_builder_tbl[key]) do
                 if v ~= nil then
@@ -470,6 +481,15 @@ config_system = {
     end,
     import_settings = function()
         local config = json.parse(clipboard.get())
+
+        local hotkey_names_tbl = {
+            onuse_antiaim_hotkey = true,
+            freestanding_hotkey = true,
+            edge_yaw = true,
+            manual_antiaim_forward = true,
+            manual_antiaim_left = true,
+            manual_antiaim_right = true
+        }
 
         for key, value in pairs(lua.vars.player_states_abrev) do
             for k, v in pairs(antiaim_builder_tbl[key]) do
@@ -521,6 +541,15 @@ config_system = {
             antiaim_helpers_tab = {},
             antiaim_tab = {}
         }
+
+        local hotkey_names_tbl = {
+            onuse_antiaim_hotkey = true,
+            freestand_hotkey = true,
+            edge_yaw = true,
+            manual_antiaim_forward = true,
+            manual_antiaim_left = true,
+            manual_antiaim_right = true,
+        }
         
         for key, value in pairs(lua.vars.player_states_abrev) do
             config.antiaim[value] = {}
@@ -542,10 +571,7 @@ config_system = {
             if tab_name ~= "configuration_tab" then
                 config.antiaim_tab[tab_name] = {}
                 for setting_name, setting in pairs(tab_settings) do
-                    if setting == menu.antiaim_tab.edge_yaw or
-                       setting == menu.antiaim_tab.manual_antiaim_forward or
-                       setting == menu.antiaim_tab.manual_antiaim_left or
-                       setting == menu.antiaim_tab.manual_antiaim_right then
+                    if hotkey_names_tbl[setting_name] then
                         local values = {ui.get(setting)}
                         config.antiaim_tab[tab_name][setting_name] = {
                             value1 = values[1],
