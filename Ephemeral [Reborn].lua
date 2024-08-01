@@ -1062,6 +1062,10 @@ antiaim_functions = {
 
         safe_head = function(cmd)
 
+            if antiaim_functions.onuse_antiaim or antiaim_functions.avoid_backstab_bool then return end
+
+            if not lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Safe head") then return end
+
             local doubletap_active = ui.get(refs.doubletap[1]) and ui.get(refs.doubletap[2])
             local onshot_active = ui.get(refs.onshot[1]) and ui.get(refs.onshot[2])
 
@@ -1077,16 +1081,8 @@ antiaim_functions = {
                     desync_functions._run(cmd, math.sin(globals.realtime() * 8) * -58 + 15, 180, 89)
                     antiaim_functions.safe_head = true
                 end
-
-                antiaim_functions.safe_head = false
             end
-        end,
 
-        safe_head_on_zeus = function(cmd)
-            if antiaim_functions.onuse_antiaim or antiaim_functions.avoid_backstab_bool then return end
-
-            if not lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Safe head") then return end
-    
             if lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safe_head_states), "On Zeus") and entity.get_classname(entity.get_player_weapon(entity.get_local_player())) == "CWeaponTaser" then
                 ui.set(refs.pitch[1], "Minimal")
                 ui.set(refs.yaw_base, "At targets")
@@ -1098,7 +1094,7 @@ antiaim_functions = {
                 desync_functions._run(cmd, math.sin(globals.realtime() * 64) * -35 + 10, 180, 89)
                 antiaim_functions.safe_head = true
             end
-            
+
             antiaim_functions.safe_head = false
         end,
 
@@ -1690,7 +1686,6 @@ client.set_event_callback("setup_command", function(cmd)
     antiaim_functions.safety_options.random_aa_on_round_end(cmd)
     antiaim_functions.safety_options.safe_knife(cmd)
     antiaim_functions.safety_options.safe_head(cmd)
-    antiaim_functions.safety_options.safe_head_on_zeus(cmd)
     antiaim_functions.safety_options.static_on_height_advantage(cmd)
     antiaim_functions.safety_options.avoid_backstab()
     antiaim_functions.safety_options.secondary_swap()
