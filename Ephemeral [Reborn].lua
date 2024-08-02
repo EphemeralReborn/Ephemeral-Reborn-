@@ -691,7 +691,7 @@ desync_functions = {
 }
 
 defensive_functions = {
-    lastsimtime = 0,
+    old_simtime = 0,
     until_tick = 0,
     ticks = 0,
     active = false,
@@ -709,16 +709,16 @@ defensive_functions = {
             return
         end
 
-        local cursimtime = toticks(entity.get_prop(local_player, "m_flSimulationTime"))
-        local simdif = defensive_functions.lastsimtime - cursimtime
+        local cur_simtime = toticks(entity.get_prop(local_player, "m_flSimulationTime"))
+        local simtime_delta = defensive_functions.old_simtime - cur_simtime
 
-        if simdif > 0 then
-            defensive_functions.until_tick = globals.tickcount() + math.abs(simdif) - toticks(client.latency())
+        if simtime_delta > 0 then
+            defensive_functions.until_tick = globals.tickcount() + math.abs(simtime_delta) - toticks(client.latency())
             defensive_functions.ticks = defensive_functions.until_tick - globals.tickcount()
         end
 
         defensive_functions.active = defensive_functions.until_tick > globals.tickcount()
-        defensive_functions.lastsimtime = cursimtime
+        defensive_functions.old_simtime = cur_simtime
         defensive_functions.time = defensive_functions.ticks - (defensive_functions.until_tick - globals.tickcount())
         
         return defensive_functions
@@ -1442,7 +1442,6 @@ visual_functions = {
         color_array_string = string.format("\a%se\a%sp\a%sh\a%se\a%sm\a%se\a%sr\a%sa\a%sl [reborn]", lua.funcs.rgba_hex(unpack(watermark_color_array[1])), lua.funcs.rgba_hex(unpack(watermark_color_array[2])), lua.funcs.rgba_hex(unpack(watermark_color_array[3])), lua.funcs.rgba_hex(unpack(watermark_color_array[4])), lua.funcs.rgba_hex(unpack(watermark_color_array[5])), lua.funcs.rgba_hex(unpack(watermark_color_array[6])),  lua.funcs.rgba_hex(unpack(watermark_color_array[7])),  lua.funcs.rgba_hex(unpack(watermark_color_array[8])),  lua.funcs.rgba_hex(unpack(watermark_color_array[9])) ) .. lua.funcs.hex({lua_color[1], lua_color[2], lua_color[3]})
 
         renderer.text(_x - renderer.measure_text("b", "ephemeral [reborn]") / 2, _y, 220, 220, 220, 255, "bo", 0, color_array_string)
-        renderer.text(width - renderer.measure_text("o", "dsc.gg/ephemeral-lua") - 5, 5, lua_color[1], lua_color[2], lua_color[3], 255, "o", 0, "dsc.gg/ephemeral-lua")
     end,
 }
 
