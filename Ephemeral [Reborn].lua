@@ -62,7 +62,6 @@ local presets = {}
 local refs = {
     damage_override = {ui.reference("RAGE", "Aimbot", "Minimum damage override")},
     damage = {ui.reference("RAGE", "Aimbot", "Minimum damage")},
-    delay_shot = ui.reference("RAGE", "Other", "Delay shot"),
     fakeduck = ui.reference("RAGE", "Other", "Duck peek assist"),
     doubletap = {ui.reference("RAGE", "Aimbot", "Double tap")},
     enabled = ui.reference("AA", "Anti-aimbot angles", "Enabled"),
@@ -370,7 +369,7 @@ config_system = {
                         config_tbl.antiaim_tab[tab_name][setting_name] = {
                             value1 = values[1],
                             value2 = values[2],
-                            value3 = values[3]
+                            value3 = values[3] or nil
                         }
                     else
                         config_tbl.antiaim_tab[tab_name][setting_name] = ui.get(setting)
@@ -565,7 +564,7 @@ config_system = {
                         config.antiaim_tab[tab_name][setting_name] = {
                             value1 = values[1],
                             value2 = values[2],
-                            value3 = values[3]
+                            value3 = values[3] or nil
                         }
                     else
                         config.antiaim_tab[tab_name][setting_name] = ui.get(setting)
@@ -783,6 +782,7 @@ defensive_functions = {
 
         local defensive_check = defensive_functions.defensive_check()
         if defensive_check.active then
+            print("defensive: active")
             if lua.funcs.table_contains(antiaim_selection, "Pitch") then
                 ui.set(refs.pitch[1], "Custom")
                 ui.set(refs.pitch[2], defensive_functions.get_defensive_pitch_values())
@@ -793,6 +793,8 @@ defensive_functions = {
                 ui.set(refs.yaw[2], defensive_functions.get_defensive_yaw_values())
                 defensive_functions.yaw_active = true
             end
+        else
+            print("defensive: nil")
         end
 
         defensive_functions.pitch_active = false
@@ -802,7 +804,6 @@ defensive_functions = {
 
 antiaim_functions = {
 
-    delay_shot = ui.new_checkbox("RAGE", "Aimbot", "Delay shot"),
     onuse_antiaim = false,
     avoid_backstab_bool = false,
     safe_knife = false,
@@ -1668,9 +1669,6 @@ client.set_event_callback("paint_ui", function()
 end)
 
 client.set_event_callback("setup_command", function(cmd)
-
-    ui.set(refs.delay_shot, ui.get(antiaim_functions.delay_shot))
-
     antiaim_functions.antiaim_state(cmd)
     antiaim_functions.antiaim_handle(cmd)
     antiaim_functions.fast_ladder(cmd)
