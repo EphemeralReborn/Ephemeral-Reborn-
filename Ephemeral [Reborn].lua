@@ -1235,7 +1235,7 @@ antiaim_functions = {
                 end
             end
 
-            cmd.in_use = should_disable and 1 or 0
+            cmd.in_use = should_disable and true or false
         end
     end,
 
