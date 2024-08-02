@@ -782,7 +782,6 @@ defensive_functions = {
 
         local defensive_check = defensive_functions.defensive_check()
         if defensive_check.active then
-            print("defensive: active")
             if lua.funcs.table_contains(antiaim_selection, "Pitch") then
                 ui.set(refs.pitch[1], "Custom")
                 ui.set(refs.pitch[2], defensive_functions.get_defensive_pitch_values())
@@ -793,8 +792,6 @@ defensive_functions = {
                 ui.set(refs.yaw[2], defensive_functions.get_defensive_yaw_values())
                 defensive_functions.yaw_active = true
             end
-        else
-            print("defensive: nil")
         end
 
         defensive_functions.pitch_active = false
