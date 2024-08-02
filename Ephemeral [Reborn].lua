@@ -644,16 +644,23 @@ desync_functions = {
         local onshot_active = ui.get(refs.onshot[1]) and ui.get(refs.onshot[2])
         local fakeduck_active = ui.get(refs.fakeduck)
         local fakelag_limit = ui.get(refs.fakelag_limit)
+        local fakelag_misalignment = fakelag_limit % 2 == 1
+        local chokedcommands = cmd.chokedcommands
+        local choke_cycle = chokedcommands % 2 == 0
 
         if not doubletap_active and not onshot_active and not cmd.no_choke or fakeduck_active then
-            if cmd.chokedcommands >= 0 and cmd.chokedcommands < fakelag_limit then
-                return cmd.chokedcommands % 2 == 0
-            else
-                return cmd.chokedcommands % 2 == 1
+            if not fakelag_misalignment then
+                if cmd.chokedcommands >= 0 and cmd.chokedcommands < fakelag_limit then
+                    choke_cycle = cmd.chokedcommands % 2 == 0
+                else
+                    choke_cycle = cmd.chokedcommands % 2 == 1
+                end
             end
         else
-            return cmd.chokedcommands == 0
+            choke_cycle = cmd.chokedcommands == 0
         end
+
+        return choke_cycle
     end,
 
     _run = function(cmd, fake, yaw, pitch)
@@ -671,22 +678,25 @@ desync_functions = {
         end
 
 
-        ui.set(refs.bodyyaw[1], desync_functions._choking(cmd) and "Static" or "Off")
+        ui.set(refs.bodyyaw[1], "Static")
 
-        if cmd.chokedcommands == 0 then
-            desync_functions.yaw = normalized_yaw - fake*2
-            desync_functions.pitch = pitch
-        end
+        desync_functions.yaw = normalized_yaw - fake*2
+        desync_functions.pitch = pitch
         
-        cmd.allow_send_packet = false
+        cmd.allow_send_packet = true
         if desync_functions._firing(cmd) then
             if not user_cmd.hasbeenpredicted then
                 if desync_functions._choking(cmd) then
-                    cmd.yaw = desync_functions.yaw
-                    cmd.pitch = desync_functions.pitch
+                    cmd.allow_send_packet = false
                 end
             end
         end
+
+        if not cmd.allow_send_packet then
+            cmd.yaw = desync_functions.yaw
+            cmd.pitch = desync_functions.pitch
+        end
+
     end,
 }
 
@@ -865,9 +875,7 @@ antiaim_functions = {
 
         if ui.get(antiaim_builder_tbl[lua.vars.player_state].enable_state) then
 
-            ui.set(refs.fakelag_mode, "Maximum")
-            ui.set(refs.fakelag_variance, 0)
-            ui.set(refs.fakelag_limit, 14)
+            ui.set(refs.fakelag_limit, 13)
 
             if entity.get_player_weapon(entity.get_local_player()) ~= nil then
                 if not entity.get_classname(entity.get_player_weapon(entity.get_local_player())):find("Grenade") then
