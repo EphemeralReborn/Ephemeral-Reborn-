@@ -285,11 +285,11 @@ for i=1, #lua.vars.player_states do
         fake_limit_delay_ticks = ui.new_slider(tab, container_aa, "Delay ticks\n" .. antiaim_container[i], 1, 10, 1, true, "", 1),
         force_defensive_exploit = ui.new_combobox(tab, container_aa, "Force defensive\n" .. antiaim_container[i], "On-peek", "Always on", "Command based"),
         defensive_antiaim_selection = ui.new_multiselect(tab, container_fl, "Defensive antiaim\n" .. antiaim_container[i], "Pitch", "Yaw"),
-        defensive_pitch_options = ui.new_combobox(tab, container_fl, "Defensive pitch\n" .. antiaim_container[i], "Up", "Half-up", "Zero", "Flick", "Random", "Custom"),
+        defensive_pitch_options = ui.new_combobox(tab, container_fl, "Defensive pitch\n" .. antiaim_container[i], "Up", "Half-up", "Zero", "Down", "Flick", "Random", "Custom"),
         defensive_pitch_flick_degree1 = ui.new_slider(tab, container_fl, "Flick degree [1]\n" .. antiaim_container[i], -89, 89, 0, true, "°", 1),
         defensive_pitch_flick_degree2 = ui.new_slider(tab, container_fl, "Flick degree [2]\n" .. antiaim_container[i], -89, 89, 0, true, "°", 1),
         defensive_pitch_custom = ui.new_slider(tab, container_fl, "Custom degree\n" .. antiaim_container[i], -89, 89, 0, true, "°", 1),
-        defensive_yaw_options = ui.new_combobox(tab, container_fl, "Defensive yaw\n" .. antiaim_container[i], "Forward", "Flick", "Spin", "Distortion", "Random"),
+        defensive_yaw_options = ui.new_combobox(tab, container_fl, "Defensive yaw\n" .. antiaim_container[i], "Forward", "Flick", "Spin", "Distortion", "Random", "Custom"),
         defensive_yaw_flick_angle1 = ui.new_slider(tab, container_fl, "Flick degree [1]\n" .. antiaim_container[i], -180, 180, 0, true, "°", 1),
         defensive_yaw_flick_angle2 = ui.new_slider(tab, container_fl, "Flick degree [2]\n" .. antiaim_container[i], -180, 180, 0, true, "°", 1),
         defensive_yaw_spin_range = ui.new_slider(tab, container_fl, "Spin range\n" .. antiaim_container[i], 1, 180, 0, true, "°", 1),
@@ -297,6 +297,7 @@ for i=1, #lua.vars.player_states do
         defensive_yaw_distortion_range = ui.new_slider(tab, container_fl, "Distortion range\n" .. antiaim_container[i], 1, 180, 0, true, "°", 1),
         defensive_yaw_distortion_speed = ui.new_slider(tab, container_fl, "Distortion speed\n" .. antiaim_container[i], 1, 10, 1, true, "", 1),
         defensive_yaw_random_range = ui.new_slider(tab, container_fl, "Random Range\n" .. antiaim_container[i], 1, 360, 1, true, "°", 1),
+        defensive_yaw_custom = ui.new_slider(tab, container_fl, "Yaw degree\n" .. antiaim_container[i], -180, 180, 0, true, "°", 1),
     }
 end
 
@@ -619,7 +620,7 @@ desync_functions = {
             return false
         end
 
-        if entity.get_prop(entity.get_local_player(), 'm_MoveType') == 9 then
+        if entity.get_prop(entity.get_local_player(), "m_MoveType") == 9 then
             return
         end
         
@@ -677,7 +678,6 @@ desync_functions = {
             normalized_yaw = lua.funcs.normalize(cam_yaw) + yaw
         end
 
-
         ui.set(refs.bodyyaw[1], "Static")
 
         desync_functions.yaw = normalized_yaw - fake*2
@@ -723,7 +723,7 @@ defensive_functions = {
         local simtime_delta = defensive_functions.old_simtime - cur_simtime
 
         if simtime_delta > 0 then
-            defensive_functions.until_tick = globals.tickcount() + math.abs(simtime_delta) - toticks(client.latency())
+            defensive_functions.until_tick = globals.tickcount() + math.abs(simtime_delta)
             defensive_functions.ticks = defensive_functions.until_tick - globals.tickcount()
         end
 
@@ -739,43 +739,49 @@ defensive_functions = {
         local cur_time = globals.curtime()
         local tick_count = globals.tickcount()
 
-        if yaw_options == 'Forward' then
+        if yaw_options == "Forward" then
             return tick_count % 3 == 0 and -155 or 155
-        elseif yaw_options == 'Flick' then
+        elseif yaw_options == "Flick" then
             local angle1 = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_yaw_flick_angle1)
             local angle2 = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_yaw_flick_angle2)
             return tick_count % 3 == 0 and angle1 or angle2
-        elseif yaw_options == 'Spin' then
+        elseif yaw_options == "Spin" then
             local speed = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_yaw_spin_speed)
             local range = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_yaw_spin_range)
             return -math.fmod(cur_time * (speed * 360), range * 2) + range
-        elseif yaw_options == 'Distortion' then
+        elseif yaw_options == "Distortion" then
             local speed = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_yaw_distortion_speed)
             local range = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_yaw_distortion_range)
             return math.sin(cur_time * speed) * range
-        elseif yaw_options == 'Random' then
+        elseif yaw_options == "Random" then
             local random_range = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_yaw_random_range)
             return math.random(-random_range / 2, random_range / 2)
+        elseif yaw_options == "Custom" then
+            return ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_yaw_custom)
         end
     end,
 
     get_defensive_pitch_values = function()
         local pitch_options = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_pitch_options)
         
-        if pitch_options == 'Up' then
+        if pitch_options == "Up" then
             return -89
-        elseif pitch_options == 'Half-up' then
+        elseif pitch_options == "Half-up" then
             return -45
-        elseif pitch_options == 'Zero' then
+        elseif pitch_options == "Zero" then
             return 0
-        elseif pitch_options == 'Flick' then
+        elseif pitch_options == "Down" then
+            return 89
+        elseif pitch_options == "Flick" then
             local flick1 = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_pitch_flick_degree1)
             local flick2 = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_pitch_flick_degree2)
             return globals.tickcount() % 3 == 0 and flick1 or flick2
-        elseif pitch_options == 'Random' then
+        elseif pitch_options == "Random" then
             return math.random(-89, 89)
-        elseif pitch_options == 'Custom' then
+        elseif pitch_options == "Custom" then
             return ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_pitch_custom)
+        else
+            return 89
         end
     end,
 
@@ -963,7 +969,7 @@ antiaim_functions = {
         if not ui.get(menu.antiaim_helpers_tab.fast_ladder) then return end
         local cam_pitch, cam_yaw = client.camera_angles()
 
-        if entity.get_prop(entity.get_local_player(), 'm_MoveType') == 9 then
+        if entity.get_prop(entity.get_local_player(), "m_MoveType") == 9 then
         
             adjust_yaw_and_controls = function(ascending)
                 cmd.pitch = 89
@@ -1228,11 +1234,7 @@ antiaim_functions = {
                 ui.set(refs.yawjitter[2], 0)
                 ui.set(refs.roll, 0)
                 cmd.roll = 0
-                if ui.get(menu.antiaim_tab.onuse_antiaim_mode) == "Static" then
-                    desync_functions._run(cmd, ui.get(menu.antiaim_tab.onuse_antiaim_side) == "Left" and -60 or 60, 0, 0)
-                else
-                    desync_functions._run(cmd, globals.tickcount() % 4 >= 2 and -60 or 60, 0, 0)
-                end
+                desync_functions._run(cmd, (ui.get(menu.antiaim_tab.onuse_antiaim_mode) == "Static" and (ui.get(menu.antiaim_tab.onuse_antiaim_side) == "Left" and -60 or 60) or (globals.tickcount() % 4 >= 2 and -60 or 60)), 0, 0)
             end
 
             cmd.in_use = should_disable and true or false
@@ -1628,6 +1630,7 @@ client.set_event_callback("paint_ui", function()
         ui.set_visible(antiaim_builder_tbl[i].defensive_yaw_distortion_range, lua.vars.active_state == i and i ~= 9 and lua.funcs.table_contains(ui.get(antiaim_builder_tbl[i].defensive_antiaim_selection), "Yaw") and ui.get(antiaim_builder_tbl[i].defensive_yaw_options) == "Distortion" and is_antiaim_builder_tab and state_enabled)
         ui.set_visible(antiaim_builder_tbl[i].defensive_yaw_distortion_speed, lua.vars.active_state == i and i ~= 9 and lua.funcs.table_contains(ui.get(antiaim_builder_tbl[i].defensive_antiaim_selection), "Yaw") and ui.get(antiaim_builder_tbl[i].defensive_yaw_options) == "Distortion" and is_antiaim_builder_tab and state_enabled)
         ui.set_visible(antiaim_builder_tbl[i].defensive_yaw_random_range, lua.vars.active_state == i and i ~= 9 and lua.funcs.table_contains(ui.get(antiaim_builder_tbl[i].defensive_antiaim_selection), "Yaw") and ui.get(antiaim_builder_tbl[i].defensive_yaw_options) == "Random" and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].defensive_yaw_custom, lua.vars.active_state == i and i ~= 9 and lua.funcs.table_contains(ui.get(antiaim_builder_tbl[i].defensive_antiaim_selection), "Yaw") and ui.get(antiaim_builder_tbl[i].defensive_yaw_options) == "Custom" and is_antiaim_builder_tab and state_enabled)
     end
 
     for i, feature in pairs(menu.antiaim_tab) do
