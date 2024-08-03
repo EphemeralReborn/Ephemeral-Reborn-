@@ -438,22 +438,27 @@ config_system = {
 
         for key, value in pairs(lua.vars.player_states_abrev) do
             for k, v in pairs(antiaim_builder_tbl[key]) do
+                if not config.antiaim[value][k] then goto skip end
                 if v ~= nil then
-                    ui.set(v, config.antiaim[value][k])
+                    ui.set(v, (config.antiaim[value][k] ~= nil and config.antiaim[value][k] or (type(config.antiaim[value][k]) == "number" and 0 or false)))
                 end
             end
+            ::skip::
         end
 
         for tab_name, tab_settings in pairs(config.antiaim_helpers_tab or {}) do
             for setting_name, setting_value in pairs(tab_settings) do
+                if not menu[tab_name][setting_name] then goto skip end
                 if setting_value ~= nil then
                     ui.set(menu[tab_name][setting_name], setting_value)
                 end
             end
+            ::skip::
         end
     
         for tab_name, tab_settings in pairs(config.antiaim_tab or {}) do
             for setting_name, setting_value in pairs(tab_settings) do
+                if not menu[tab_name][setting_name] then goto skip end
                 if setting_value ~= nil and type(setting_value) == "table" then
                     if hotkey_names_tbl[setting_name] then
                         
@@ -472,6 +477,7 @@ config_system = {
                     ui.set(menu[tab_name][setting_name], setting_value)
                 end
             end
+            ::skip::
         end
     end,
     import_settings = function()
@@ -489,24 +495,30 @@ config_system = {
         for key, value in pairs(lua.vars.player_states_abrev) do
             for k, v in pairs(antiaim_builder_tbl[key]) do
                 if v ~= nil then
+                if not config.antiaim[value][k] then goto skip end
+                    print(type(config.antiaim[value][k]))
                     ui.set(v, config.antiaim[value][k])
                 end
             end
+            ::skip::
         end
 
         for tab_name, tab_settings in pairs(config.antiaim_helpers_tab or {}) do
             for setting_name, setting_value in pairs(tab_settings) do
+                if not menu[tab_name][setting_name] then goto skip end
                 if setting_value ~= nil then
                     ui.set(menu[tab_name][setting_name], setting_value)
                 end
             end
+            ::skip::
         end
     
         for tab_name, tab_settings in pairs(config.antiaim_tab or {}) do
             for setting_name, setting_value in pairs(tab_settings) do
+                if not menu[tab_name][setting_name] then goto skip end
                 if setting_value ~= nil and type(setting_value) == "table" then
                     if hotkey_names_tbl[setting_name] then
-
+                        
                         local idx_to_mode = {
                             [0] = "Always on",
                             [1] = "On hotkey",
@@ -522,6 +534,7 @@ config_system = {
                     ui.set(menu[tab_name][setting_name], setting_value)
                 end
             end
+            ::skip::
         end
     end,
     export_settings = function(name)
