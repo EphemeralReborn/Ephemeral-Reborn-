@@ -725,11 +725,15 @@ defensive_functions = {
 
     defensive_check = function()
         local local_player = entity.get_local_player()
-        if not local_player then return end
-        if antiaim_functions.safe_head or antiaim_functions.safe_knife then return end
+        if not local_player or antiaim_functions.safe_head or antiaim_functions.safe_knife then 
+            return 
+        end
 
         local antiaim_selection = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_antiaim_selection)
-        if not (lua.funcs.table_contains(antiaim_selection, "Pitch") or lua.funcs.table_contains(antiaim_selection, "Yaw")) then
+        local pitch_selected = lua.funcs.table_contains(antiaim_selection, "Pitch")
+        local yaw_selected = lua.funcs.table_contains(antiaim_selection, "Yaw")
+        
+        if not (pitch_selected or yaw_selected) then
             return
         end
 
@@ -737,19 +741,19 @@ defensive_functions = {
         local simtime_delta = defensive_functions.old_simtime - cur_simtime
 
         if simtime_delta > 0 then
-            defensive_functions.until_tick = globals.tickcount() + math.abs(simtime_delta) - (ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_ping_calculation) and toticks(client.latency()) or 0)
+            local ping_calc = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_ping_calculation)
+            defensive_functions.until_tick = globals.tickcount() + math.abs(simtime_delta) - (ping_calc and toticks(client.latency()) or 0)
             defensive_functions.ticks = defensive_functions.until_tick - globals.tickcount()
         end
 
         defensive_functions.active = defensive_functions.until_tick > globals.tickcount()
         defensive_functions.old_simtime = cur_simtime
         defensive_functions.time = defensive_functions.ticks - (defensive_functions.until_tick - globals.tickcount())
-        
+
         return defensive_functions
     end,
 
-    get_defensive_yaw_values = function()
-        local yaw_options = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_yaw_options)
+    get_yaw_value = function(yaw_options)
         local cur_time = globals.curtime()
         local tick_count = globals.tickcount()
 
@@ -775,9 +779,7 @@ defensive_functions = {
         end
     end,
 
-    get_defensive_pitch_values = function()
-        local pitch_options = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_pitch_options)
-        
+    get_pitch_value = function(pitch_options)
         if pitch_options == "Up" then
             return -89
         elseif pitch_options == "Half-up" then
@@ -801,25 +803,29 @@ defensive_functions = {
 
     _run = function()
         local local_player = entity.get_local_player()
-        if not local_player then return end
-        if antiaim_functions.safe_head or antiaim_functions.safe_knife then return end
+        if not local_player or antiaim_functions.safe_head or antiaim_functions.safe_knife then 
+            return 
+        end
 
         local antiaim_selection = ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_antiaim_selection)
-        if not (lua.funcs.table_contains(antiaim_selection, "Pitch") or lua.funcs.table_contains(antiaim_selection, "Yaw")) then
+        local pitch_selected = lua.funcs.table_contains(antiaim_selection, "Pitch")
+        local yaw_selected = lua.funcs.table_contains(antiaim_selection, "Yaw")
+
+        if not (pitch_selected or yaw_selected) then
             defensive_functions.active = false
             return
         end
 
         local defensive_check = defensive_functions.defensive_check()
         if defensive_check.active then
-            if lua.funcs.table_contains(antiaim_selection, "Pitch") then
+            if pitch_selected then
                 ui.set(refs.pitch[1], "Custom")
-                ui.set(refs.pitch[2], defensive_functions.get_defensive_pitch_values())
+                ui.set(refs.pitch[2], defensive_functions.get_pitch_value(ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_pitch_options)))
                 defensive_functions.pitch_active = true
             end
 
-            if lua.funcs.table_contains(antiaim_selection, "Yaw") then
-                ui.set(refs.yaw[2], defensive_functions.get_defensive_yaw_values())
+            if yaw_selected then
+                ui.set(refs.yaw[2], defensive_functions.get_yaw_value(ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_yaw_options)))
                 defensive_functions.yaw_active = true
             end
         end
