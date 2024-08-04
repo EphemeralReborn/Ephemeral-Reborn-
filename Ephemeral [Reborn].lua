@@ -430,7 +430,7 @@ config_system = {
 
         local hotkey_names_tbl = {
             onuse_antiaim_hotkey = true,
-            freestanding_hotkey = true,
+            freestand_hotkey = true,
             edge_yaw = true,
             manual_antiaim_forward = true,
             manual_antiaim_left = true,
@@ -457,6 +457,7 @@ config_system = {
             for setting_name, setting_value in pairs(tab_settings) do
                 if setting_value ~= nil and type(setting_value) == "table" then
                     if hotkey_names_tbl[setting_name] then
+                        print(hotkey_names_tbl[setting_name])
                         
                         local idx_to_mode = {
                             [0] = "Always on",
@@ -480,7 +481,7 @@ config_system = {
 
         local hotkey_names_tbl = {
             onuse_antiaim_hotkey = true,
-            freestanding_hotkey = true,
+            freestand_hotkey = true,
             edge_yaw = true,
             manual_antiaim_forward = true,
             manual_antiaim_left = true,
