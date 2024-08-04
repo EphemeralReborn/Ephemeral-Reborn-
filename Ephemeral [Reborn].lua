@@ -495,9 +495,9 @@ config_system = {
 
         for key, value in pairs(lua.vars.player_states_abrev) do
             for k, v in pairs(antiaim_builder_tbl[key]) do
-                if v ~= nil then
                 if not config.antiaim[value][k] then goto skip end
-                    ui.set(v, config.antiaim[value][k])
+                if v ~= nil then
+                    ui.set(v, (config.antiaim[value][k] ~= nil and config.antiaim[value][k] or (type(config.antiaim[value][k]) == "number" and 0 or false)))
                 end
             end
             ::skip::
