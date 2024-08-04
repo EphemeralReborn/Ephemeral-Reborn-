@@ -457,7 +457,6 @@ config_system = {
             for setting_name, setting_value in pairs(tab_settings) do
                 if setting_value ~= nil and type(setting_value) == "table" then
                     if hotkey_names_tbl[setting_name] then
-                        print(hotkey_names_tbl[setting_name])
                         
                         local idx_to_mode = {
                             [0] = "Always on",
