@@ -298,6 +298,7 @@ for i=1, #lua.vars.player_states do
         defensive_yaw_distortion_speed = ui.new_slider(tab, container_fl, "Distortion speed\n" .. antiaim_container[i], 1, 10, 1, true, "", 1),
         defensive_yaw_random_range = ui.new_slider(tab, container_fl, "Random Range\n" .. antiaim_container[i], 1, 360, 1, true, "°", 1),
         defensive_yaw_custom = ui.new_slider(tab, container_fl, "Yaw degree\n" .. antiaim_container[i], -180, 180, 0, true, "°", 1),
+        defensive_ping_calculation = ui.new_checkbox(tab, container_fl, "• \aB6B665FFPing calculation\n" .. antiaim_container[i]),
     }
 end
 
@@ -736,7 +737,7 @@ defensive_functions = {
         local simtime_delta = defensive_functions.old_simtime - cur_simtime
 
         if simtime_delta > 0 then
-            defensive_functions.until_tick = globals.tickcount() + math.abs(simtime_delta)
+            defensive_functions.until_tick = globals.tickcount() + math.abs(simtime_delta) - (ui.get(antiaim_builder_tbl[lua.vars.player_state].defensive_ping_calculation) and toticks(client.latency()) or 0)
             defensive_functions.ticks = defensive_functions.until_tick - globals.tickcount()
         end
 
@@ -1644,6 +1645,7 @@ client.set_event_callback("paint_ui", function()
         ui.set_visible(antiaim_builder_tbl[i].defensive_yaw_distortion_speed, lua.vars.active_state == i and i ~= 9 and lua.funcs.table_contains(ui.get(antiaim_builder_tbl[i].defensive_antiaim_selection), "Yaw") and ui.get(antiaim_builder_tbl[i].defensive_yaw_options) == "Distortion" and is_antiaim_builder_tab and state_enabled)
         ui.set_visible(antiaim_builder_tbl[i].defensive_yaw_random_range, lua.vars.active_state == i and i ~= 9 and lua.funcs.table_contains(ui.get(antiaim_builder_tbl[i].defensive_antiaim_selection), "Yaw") and ui.get(antiaim_builder_tbl[i].defensive_yaw_options) == "Random" and is_antiaim_builder_tab and state_enabled)
         ui.set_visible(antiaim_builder_tbl[i].defensive_yaw_custom, lua.vars.active_state == i and i ~= 9 and lua.funcs.table_contains(ui.get(antiaim_builder_tbl[i].defensive_antiaim_selection), "Yaw") and ui.get(antiaim_builder_tbl[i].defensive_yaw_options) == "Custom" and is_antiaim_builder_tab and state_enabled)
+        ui.set_visible(antiaim_builder_tbl[i].defensive_ping_calculation, lua.vars.active_state == i and i ~= 9 and is_antiaim_builder_tab and state_enabled)
     end
 
     for i, feature in pairs(menu.antiaim_tab) do
