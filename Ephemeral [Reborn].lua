@@ -497,7 +497,6 @@ config_system = {
             for k, v in pairs(antiaim_builder_tbl[key]) do
                 if v ~= nil then
                 if not config.antiaim[value][k] then goto skip end
-                    print(type(config.antiaim[value][k]))
                     ui.set(v, config.antiaim[value][k])
                 end
             end
