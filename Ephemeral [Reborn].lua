@@ -950,7 +950,6 @@ antiaim_functions = {
         if not entity.get_local_player() or not entity.is_alive(entity.get_local_player()) then return end
 
         if antiaim_functions.onuse_antiaim or defensive_functions.active or antiaim_functions.safe_head or antiaim_functions.safe_knife or antiaim_functions.random_antiam then return end
-        print("balls")
 
         if cmd.in_use == 1 then return end
 
@@ -1212,7 +1211,6 @@ antiaim_functions = {
                 for _, player in ipairs(entity.get_players(true)) do
                     local distance = local_origin:dist(vector(entity.get_origin(player)))
                     if entity.get_classname(entity.get_player_weapon(player)) == "CKnife" and distance <= 300 then
-                        print("avoid")
                         ui.set(refs.yaw[2], 180)
                         ui.set(refs.pitch[1], "Off")
                         antiaim_functions.avoid_backstab_bool = true
