@@ -82,6 +82,7 @@ local refs = {
     damage = {ui.reference("RAGE", "Aimbot", "Minimum damage")},
     fakeduck = ui.reference("RAGE", "Other", "Duck peek assist"),
     doubletap = {ui.reference("RAGE", "Aimbot", "Double tap")},
+    doubletap_fl_limit = ui.reference("RAGE", "Aimbot", "Double tap fake lag limit"),
     enabled = ui.reference("AA", "Anti-aimbot angles", "Enabled"),
     pitch = {ui.reference("AA", "Anti-aimbot angles", "pitch")},
     roll = ui.reference("AA", "Anti-aimbot angles", "roll"),
@@ -140,11 +141,6 @@ local lua = {
             ui.set_visible(refs.freestanding[2], ref)
             ui.set_visible(refs.freestanding_bodyyaw, ref)
             ui.set_visible(refs.edge_yaw, ref)
-            ui.set_visible(refs.fakelag_enabled[1], ref)
-            ui.set_visible(refs.fakelag_enabled[2], ref)
-            ui.set_visible(refs.fakelag_mode, ref)
-            ui.set_visible(refs.fakelag_variance, ref)
-            ui.set_visible(refs.fakelag_limit, ref)
         end,
         default_antiaim_tab = function()
             ui.set(refs.enabled, true)
@@ -302,7 +298,7 @@ for i=1, #lua.vars.player_states do
         fake_limit_right_delayed = ui.new_slider(tab, container_aa, "Fake yaw right\n delayed" .. antiaim_container[i], 1, 58, 25, true, "°", 1),
         fake_limit_delay_ticks = ui.new_slider(tab, container_aa, "Delay ticks\n" .. antiaim_container[i], 1, 10, 1, true, "", 1),
 
-            force_defensive_exploit = ui.new_combobox(tab, container_aa, "Force defensive\n" .. antiaim_container[i], "On-peek", "Always on", "Command based"),
+            force_defensive_exploit = ui.new_combobox(tab, container_aa, "Force defensive\n" .. antiaim_container[i], "On-peek", "Always on", "Command based", "Invalidation"),
             defensive_antiaim_selection = ui.new_multiselect(tab, container_fl, "Defensive antiaim\n" .. antiaim_container[i], "Pitch", "Yaw"),
             defensive_pitch_options = ui.new_combobox(tab, container_fl, "Defensive pitch\n" .. antiaim_container[i], "Up", "Half-up", "Zero", "Down", "Flick", "Random", "Custom"),
             defensive_pitch_flick_degree1 = ui.new_slider(tab, container_fl, "Flick degree [1]\n" .. antiaim_container[i], -89, 89, 0, true, "°", 1),
@@ -628,93 +624,146 @@ antiaim_functions = {}
 
 desync_functions = {
 
-    firing_time = 0,
+    switch_move = true,
+    send_packet = true,
     yaw = 0,
     pitch = 0,
+    nades = 0,
 
-    _firing = function(cmd)
+    _micromove = function(cmd)
+        local lp = entity.get_local_player()
+        local speed = 1.01
+        local vel = vector(entity.get_prop(me, "m_vecVelocity")):length2d()
 
-        local client_weapon = entity.get_player_weapon(entity.get_local_player())
-
-        if not client_weapon then
-            return false
-        end
-
-        if entity.get_prop(entity.get_local_player(), "m_MoveType") == 9 then
+        if vel > 3 then
             return
         end
-        
-        if cmd.in_attack == 1 or cmd.in_attack2 == 1 then
-            if entity.get_classname(entity.get_player_weapon(entity.get_local_player())):find("Grenade") then
-                desync_functions.firing_time = globals.curtime() + 0.20
-            else
-                desync_functions.firing_time = globals.curtime() + 0.001
-            end
+
+        if bit.band(entity.get_prop(lp, "m_fFlags"), 4) == 4 or ui.get(refs.fakeduck) then
+            speed = speed * 2.94117647
         end
 
-        if desync_functions.firing_time > globals.curtime() then
+        desync_functions.switch_move = desync_functions.switch_move or false
+
+        if desync_functions.switch_move then
+            cmd.sidemove = cmd.sidemove + speed
+        else
+            cmd.sidemove = cmd.sidemove - speed
+        end
+
+        desync_functions.switch_move = not desync_functions.switch_move
+    end,
+
+    _desync = function (cmd)
+        local lp = entity.get_local_player()
+
+        if cmd.in_use == 1 then
+            return false
+        end
+        local weapon_ent = entity.get_player_weapon(lp)
+
+        if cmd.in_attack == 1 then
+            local weapon = entity.get_classname(weapon_ent)
+
+            if weapon == nil then
+                return false
+            end
+
+            if weapon:find("Grenade") or weapon:find('Flashbang') then
+                desync_functions.nades = globals.tickcount()
+            else
+                if math.max(entity.get_prop(weapon_ent, "m_flNextPrimaryAttack"), entity.get_prop(lp, "m_flNextAttack")) - globals.tickinterval() - globals.curtime() < 0 then
+                    return false
+                end
+            end
+        end
+        local throw = entity.get_prop(weapon_ent, "m_fThrowTime")
+
+        if desync_functions.nades + 15 == globals.tickcount() or (throw ~= nil and throw ~= 0) then 
+            return false 
+        end
+        
+        if entity.get_prop(entity.get_game_rules(), "m_bFreezePeriod") == 1 then
+            return false
+        end
+    
+        if entity.get_prop(lp, "m_MoveType") == 9 then
             return false
         end
 
+        if entity.get_prop(lp, "m_MoveType") == 10 then
+            return false
+        end
+    
         return true
     end,
 
+    get_charge = function ()
+        local lp = entity.get_local_player()
+        local simulation_time = entity.get_prop(lp, "m_flSimulationTime")
+        return (globals.tickcount() - simulation_time/globals.tickinterval())
+    end,
 
-    _choking = function(cmd)
-        local doubletap_active = ui.get(refs.doubletap[1]) and ui.get(refs.doubletap[2])
-        local onshot_active = ui.get(refs.onshot[1]) and ui.get(refs.onshot[2])
-        local fakeduck_active = ui.get(refs.fakeduck)
-        local fakelag_limit = ui.get(refs.fakelag_limit)
-        local fakelag_misalignment = fakelag_limit % 2 == 1
-        local chokedcommands = cmd.chokedcommands
-        local choke_cycle = chokedcommands % 2 == 0
-
-        if not doubletap_active and not onshot_active and not cmd.no_choke or fakeduck_active then
-            if not fakelag_misalignment then
-                if cmd.chokedcommands >= 0 and cmd.chokedcommands < fakelag_limit then
-                    choke_cycle = cmd.chokedcommands % 2 == 0
-                else
-                    choke_cycle = cmd.chokedcommands % 2 == 1
-                end
-            end
-        else
-            choke_cycle = cmd.chokedcommands == 0
+    get_limit = function ()
+        if not ui.get(refs.fakelag_enabled[1]) then
+            return 1
         end
 
-        return choke_cycle
+        local limit = ui.get(refs.fakelag_limit)
+        local charge = desync_functions.get_charge()
+
+        local doubletap_active = ui.get(refs.doubletap[1]) and ui.get(refs.doubletap[2])
+        local onshot_active = ui.get(refs.onshot[1]) and ui.get(refs.onshot[2])
+
+        if (doubletap_active or onshot_active) and not ui.get(refs.fakeduck) then
+            if charge > 0 then
+                limit = 1
+            else
+                limit = ui.get(refs.doubletap_fl_limit)
+            end
+        end
+        
+        return limit
+    end,
+
+    _choking = function (cmd)
+        local limit = desync_functions.get_limit()
+
+        if cmd.chokedcommands < limit and (not cmd.no_choke or (cmd.chokedcommands == 0 and limit == 1)) then
+            desync_functions.send_packet = false
+            cmd.no_choke = false
+        else
+            cmd.no_choke = true
+            desync_functions.send_packet = true
+        end
+
+        cmd.allow_send_packet = desync_functions.send_packet
+
+        return desync_functions.send_packet
     end,
 
     _run = function(cmd, fake, yaw, pitch)
-        local user_cmd = get_input_vfunc_ptr.vfptr.GetUserCmd(ffi.cast("uintptr_t", get_input_vfunc_ptr), 0, cmd.command_number)
-        local eye_angles = {entity.get_prop(entity.get_local_player(), "m_angEyeAngles")}
+
+        desync_functions._micromove(cmd)
+
+        local threat = client.current_threat()
         local cam_pitch, cam_yaw = client.camera_angles()
         local yaw_base = ui.get(antiaim_builder_tbl[lua.vars.player_state].yaw_base)
-        local normalized_yaw = 0
+        local send_packet = desync_functions._choking(cmd)
 
-        
-        if yaw_base == "At targets" and client.current_threat() then
-            normalized_yaw = eye_angles[2]
-        else
-            normalized_yaw = lua.funcs.normalize(cam_yaw) + yaw
+        if yaw_base == "At targets" and threat then
+            local pos = vector(entity.get_origin(entity.get_local_player()))
+            local epos = vector(entity.get_origin(threat))
+
+            cam_pitch, cam_yaw = pos:to(epos):angles()
         end
 
-        ui.set(refs.bodyyaw[1], "Static")
-
-        desync_functions.yaw = normalized_yaw - fake*2
-        desync_functions.pitch = pitch
-        
-        cmd.allow_send_packet = true
-        if desync_functions._firing(cmd) then
-            if not user_cmd.hasbeenpredicted then
-                if desync_functions._choking(cmd) then
-                    cmd.allow_send_packet = false
-                end
+        ui.set(refs.bodyyaw[1], "Off")
+        if desync_functions._desync(cmd) then
+            if not send_packet then
+                cmd.yaw = cam_yaw + yaw - fake*2
+                cmd.pitch = pitch
             end
-        end
-
-        if not cmd.allow_send_packet then
-            cmd.yaw = desync_functions.yaw
-            cmd.pitch = desync_functions.pitch
         end
     end,
 }
@@ -901,12 +950,11 @@ antiaim_functions = {
         if not entity.get_local_player() or not entity.is_alive(entity.get_local_player()) then return end
 
         if antiaim_functions.onuse_antiaim or defensive_functions.active or antiaim_functions.safe_head or antiaim_functions.safe_knife or antiaim_functions.random_antiam then return end
+        print("balls")
 
         if cmd.in_use == 1 then return end
 
         if ui.get(antiaim_builder_tbl[lua.vars.player_state].enable_state) then
-
-            ui.set(refs.fakelag_limit, 13)
 
             if entity.get_player_weapon(entity.get_local_player()) ~= nil then
                 if not entity.get_classname(entity.get_player_weapon(entity.get_local_player())):find("Grenade") then
@@ -914,6 +962,8 @@ antiaim_functions = {
                         cmd.force_defensive = true
                     elseif ui.get(antiaim_builder_tbl[lua.vars.player_state].force_defensive_exploit) == "Command based" then
                         cmd.force_defensive = cmd.command_number % 2 == 1
+                    elseif ui.get(antiaim_builder_tbl[lua.vars.player_state].force_defensive_exploit) == "Invalidation" then
+                        cmd.force_defensive = cmd.chokedcommands % 2 == 1 and not cmd.no_choke
                     end
                 else
                     cmd.force_defensive = false
@@ -934,8 +984,7 @@ antiaim_functions = {
             local side = (math.floor(math.abs(entity.get_prop(entity.get_local_player(), "m_flPoseParameter", 11) * 120)) - 60) > 0 and 1 or -1
             local body_yaw_mode = ui.get(antiaim_builder_tbl[lua.vars.player_state].bodyyaw)
 
-
-            if not defensive_functions.yaw_active then
+            if not defensive_functions.yaw_active or antiaim_functions.manual_antiaim_bool then
                 if yaw_mode ~= "Off" then
                     ui.set(refs.yaw[1], "180")
                     if yaw_mode == "L&R" then
@@ -1053,7 +1102,7 @@ antiaim_functions = {
     
             local apply_antiaim = function()
                 ui.set(refs.pitch[1], mode_settings.pitch)
-                ui.set(refs.yaw_base, "At targets")
+                ui.set(refs.yaw_base, "Local view")
                 ui.set(refs.yaw[1], "180")
                 ui.set(refs.yaw[2], mode_settings.yaw_value)
                 ui.set(refs.yawjitter[1], "Random")
@@ -1091,7 +1140,6 @@ antiaim_functions = {
     
             if lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.safety_options), "Safe knife") and lua.vars.player_state == 7 and entity.get_classname(entity.get_player_weapon(entity.get_local_player())) == "CKnife" then
                 ui.set(refs.pitch[1], "Minimal")
-                ui.set(refs.yaw_base, "At targets")
                 ui.set(refs.yaw[1], "180")
                 ui.set(refs.yaw[2], 8)
                 ui.set(refs.yawjitter[1], "Random")
@@ -1115,7 +1163,6 @@ antiaim_functions = {
 
             local safe_head_antiaim = function(desync)
                 ui.set(refs.pitch[1], "Minimal")
-                ui.set(refs.yaw_base, "At targets")
                 ui.set(refs.yaw[1], "180")
                 ui.set(refs.yaw[2], 0)
                 ui.set(refs.yawjitter[1], "Off")
@@ -1146,7 +1193,6 @@ antiaim_functions = {
                lua.funcs.table_contains(ui.get(menu.antiaim_helpers_tab.static_on_height_states), lua.vars.int_to_string[lua.vars.player_state]) and 
                lp_origin.z > target_origin.z + 115 then
                 ui.set(refs.pitch[1], "Minimal")
-                ui.set(refs.yaw_base, "At targets")
                 ui.set(refs.yaw[1], "180")
                 ui.set(refs.yaw[2], 0)
                 ui.set(refs.yawjitter[1], "Off")
@@ -1166,6 +1212,7 @@ antiaim_functions = {
                 for _, player in ipairs(entity.get_players(true)) do
                     local distance = local_origin:dist(vector(entity.get_origin(player)))
                     if entity.get_classname(entity.get_player_weapon(player)) == "CKnife" and distance <= 300 then
+                        print("avoid")
                         ui.set(refs.yaw[2], 180)
                         ui.set(refs.pitch[1], "Off")
                         antiaim_functions.avoid_backstab_bool = true
@@ -1227,7 +1274,6 @@ antiaim_functions = {
         if ui.get(menu.antiaim_tab.onuse_antiaim_hotkey) then
             if entity.get_classname(entity.get_player_weapon(entity.get_local_player())) == "CC4" then return end
 
-            local body_yaw_mode = ui.get(antiaim_builder_tbl[lua.vars.player_state].bodyyaw)
 
             local should_disable = false
             local planted_bomb = entity.get_all("CPlantedC4")[1]
@@ -1250,7 +1296,6 @@ antiaim_functions = {
                     end
                 end
             end
-            
 
             if not should_disable then
                 antiaim_functions.onuse_antiaim = true
@@ -1258,11 +1303,9 @@ antiaim_functions = {
                 ui.set(refs.yaw[2], 180)
                 ui.set(refs.yawjitter[2], 0)
                 ui.set(refs.roll, 0)
-                cmd.roll = 0
+                cmd.in_use = 0
                 desync_functions._run(cmd, (ui.get(menu.antiaim_tab.onuse_antiaim_mode) == "Static" and (ui.get(menu.antiaim_tab.onuse_antiaim_side) == "Left" and -60 or 60) or (globals.tickcount() % 4 >= 2 and -60 or 60)), 0, 0)
             end
-
-            cmd.in_use = should_disable and true or false
         end
     end,
 
@@ -1708,10 +1751,11 @@ client.set_event_callback("paint_ui", function()
 		ui.set_visible(feature, is_config_tab)
 	end
 
-    lua.funcs.reset_antiaim_tab(false)
+    lua.funcs.reset_antiaim_tab(true)
 end)
 
 client.set_event_callback("setup_command", function(cmd)
+
     antiaim_functions.antiaim_state(cmd)
     antiaim_functions.antiaim_handle(cmd)
     antiaim_functions.fast_ladder(cmd)
