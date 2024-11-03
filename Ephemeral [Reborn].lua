@@ -1751,7 +1751,7 @@ client.set_event_callback("paint_ui", function()
 		ui.set_visible(feature, is_config_tab)
 	end
 
-    lua.funcs.reset_antiaim_tab(true)
+    lua.funcs.reset_antiaim_tab(false)
 end)
 
 client.set_event_callback("setup_command", function(cmd)
