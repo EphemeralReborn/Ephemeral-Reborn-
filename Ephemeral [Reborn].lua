@@ -655,6 +655,7 @@ desync_functions = {
     end,
 
     _desync = function (cmd)
+
         local lp = entity.get_local_player()
 
         if cmd.in_use == 1 then
@@ -672,14 +673,15 @@ desync_functions = {
             if weapon:find("Grenade") or weapon:find('Flashbang') then
                 desync_functions.nades = globals.tickcount()
             else
+                desync_functions._micromove(cmd)
                 if math.max(entity.get_prop(weapon_ent, "m_flNextPrimaryAttack"), entity.get_prop(lp, "m_flNextAttack")) - globals.tickinterval() - globals.curtime() < 0 then
                     return false
                 end
             end
         end
         local throw = entity.get_prop(weapon_ent, "m_fThrowTime")
-
-        if desync_functions.nades + 15 == globals.tickcount() or (throw ~= nil and throw ~= 0) then 
+        
+        if desync_functions.nades + 15 == globals.tickcount() or (throw ~= nil and throw ~= 0) then
             return false 
         end
         
@@ -743,8 +745,6 @@ desync_functions = {
     end,
 
     _run = function(cmd, fake, yaw, pitch)
-
-        desync_functions._micromove(cmd)
 
         local threat = client.current_threat()
         local cam_pitch, cam_yaw = client.camera_angles()
